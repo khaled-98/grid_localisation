@@ -1,6 +1,7 @@
 import math
+import numpy as np
 import rospy
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, OccupancyGrid
 from nav_msgs.srv import GetMap
 
 def normalise(a):
@@ -77,9 +78,25 @@ def init():
         print("Service call failed: %s"%e)
         return
 
+    # Define grid resolution
+    map_width = map.info.resolution*map.info.width
+    map_height = map.info.resolution*map.info.height
 
-    # previous_dist =
+    linear_resolution = 0.15 # 15 cm
+    angular_resolution = 5 # degrees
+
+    grid_width = math.floor(map_width/linear_resolution)
+    grid_length = math.floor(map_height/linear_resolution)
+    grid_depth = math.floor(360/angular_resolution)
+    number_of_cells_in_grid = grid_width * grid_length * grid_depth
+
+    # Initialise distributions uniformly
+    previous_dist = np.full([grid_width, grid_length, grid_depth], 1/number_of_cells_in_grid)
+    current_dist = previous_dist
+
     while not rospy.is_shutdown():
+        for k in range(number_of_cells_in_grid): # line 2 of table 8.1
+            
         prior = motion_model(current_pose, [previous_odata, current_odata], previous_pose)
 
 
