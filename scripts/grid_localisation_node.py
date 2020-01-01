@@ -3,6 +3,7 @@ import numpy as np
 import rospy
 from nav_msgs.msg import Odometry, OccupancyGrid
 from nav_msgs.srv import GetMap
+from tf.transformations import euler_from_quaternion
 
 def normalise(a):
     return math.atan2(math.sin(a), math.cos(a))
@@ -23,14 +24,40 @@ def angle_diff(a, b):
 def prob(a, b):
     return (1/math.sqrt(2*math.pi*b))*math.exp(-0.5*((a**2)/b))
 
-def motion_model(x_t, u_t, x_t_1):
-    delta_rot1 = angle_diff(math.atan2(u_t[1].y-u_t[0].y, u_t[1].x-u_t[0].x), u[0].theta)
-    delta_trans = math.sqrt((u_t[0].x-u_t[1].x)**2 + (u_t[0].y-u_t[1].y)**2)
-    delta_rot2 = angle_diff(u_t[1].theta, angle_diff(u_t[0].theta, delta_rot1)) # NOTE: for some reason AMCL doesn't subtract the second theta
+def angle_from_orientation(orientation):
+    orientation_list = [orientation.x, orientation.y, orientation.z, orientation.w]
+    (roll, pitch, yaw) = euler_from_quaternion (orientation_list)
+    return yaw
 
-    delta_rot1_hat = angle_diff(math.atan2(x_t.y-x_t_1.y, x_t.x-x_t_1.x), x_t_1.theta)
-    delta_trans_hat = math.sqrt((x_t_1.x-x_t.x)**2 + (x_t_1.y-x_t.y)**2)
-    delta_rot2_hat = angle_diff(x_t_1.theta, angle_diff(x_t_1.theta, delta_rot1))
+def motion_model(x_t, u_t, x_t_1):
+    alpha1 = 0.2
+    alpha2 = 0.2
+    alpha3 = 0.8
+    alpha5 = 0.1
+
+    x_prime = x_t[0]
+    y_prime = x_t[1]
+    theta_prime = x_t[2]
+
+    x_bar = u_t[0].position.x
+    y_bar = u_t[0].position.y
+    theta_bar = angle_from_orientation(u_t[0].orientation)
+
+    x_bar_prime = u_t[1].position.x
+    y_bar_prime = u_t[1].position.y
+    theta_bar_prime = angle_from_orientation(u_t[1].orientation)
+
+    x = x_t_1[0]
+    y = x_t_1[1]
+    theta = x_t_1[2]
+
+    delta_rot1 = angle_diff(math.atan2(y_bar_prime-y_bar, x_bar_prime-x_bar), theta_bar)
+    delta_trans = math.sqrt((x_bar - x_bar_prime)**2 + (y_bar - y_bar_prime)**2)
+    delta_rot2 = angle_diff(theta_bar_prime, angle_diff(theta_bar, delta_rot1)) # NOTE: for some reason AMCL doesn't subtract the second theta
+
+    delta_rot1_hat = angle_diff(math.atan2(y_prime-y, x_prime-x), theta)
+    delta_trans_hat = math.sqrt((x-x_prime)**2 + (y-y_prime)**2)
+    delta_rot2_hat = angle_diff(theta_prime, angle_diff(theta, delta_rot1_hat))
 
     p1 = prob(angle_diff(delta_rot1, delta_rot1_hat), alpha1*(delta_rot1_hat**2)+alpha2*(delta_trans**2))
     p2 = prob(delta_trans-delta_trans_hat, alpha3*(delta_trans_hat**2)+alpha4*(delta_rot1_hat**2)+alpha4*(delta_rot2_hat**2))
@@ -57,12 +84,11 @@ def observation_model(z, x, m):
 previous_pose = Odometry()
 current_pose = Odometry()
 
-previous_odata = Odometry()
-current_odata = Odometry()
+previous_odata = Odometry().pose.pose
+current_odata = Odometry().pose.pose
 
 def odom_callback(data):
-    previous_pose = current_pose
-    current_pose = data.pose.pose
+    current_odata = data.pose.pose
 
 def init():
     rospy.init_node('grid_localisation')
@@ -72,7 +98,7 @@ def init():
     rospy.loginfo("Waiting for map ...")
     try:
         get_map = rospy.ServiceProxy('static_map', GetMap)
-        map = get_map()
+        map = get_map().map
         rospy.loginfo("Map Recieved!")
     except rospy.ServiceException, e:
         print("Service call failed: %s"%e)
@@ -85,9 +111,9 @@ def init():
     linear_resolution = 0.15 # 15 cm
     angular_resolution = math.radians(5) # degrees to radians
 
-    grid_width = math.floor(map_width/linear_resolution)
-    grid_length = math.floor(map_height/linear_resolution)
-    grid_depth = math.floor((2*math.pi))/angular_resolution)
+    grid_width = int(math.floor(map_width/linear_resolution))
+    grid_length = int(math.floor(map_height/linear_resolution))
+    grid_depth = int(math.floor((2*math.pi)/angular_resolution))
     number_of_cells_in_grid = grid_width * grid_length * grid_depth
 
     # Initialise distributions uniformly
@@ -96,7 +122,10 @@ def init():
 
     pbarkt = np.zeros([grid_width, grid_length, grid_depth])
 
+    previous_odata = current_odata # Not sure if this is a valid thing to do
+
     while not rospy.is_shutdown():
+        ut = [previous_odata, current_odata]
         for k in range(number_of_cells_in_grid): # line 2 of table 8.1
             [rowk, colk, depthk] = np.unravel_index(k,[grid_width, grid_length, grid_depth])
             xt = [rowk, colk, depthk*angular_resolution]
@@ -110,7 +139,7 @@ def init():
             # ===========================================
 
         prior = motion_model(current_pose, [previous_odata, current_odata], previous_pose)
-
+        previous_odata = ut[1] # previous = current
 
 if __name__ == '__main__':
     try:
