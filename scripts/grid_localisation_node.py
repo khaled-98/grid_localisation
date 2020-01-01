@@ -1,8 +1,10 @@
 import math
 import rospy
+from nav_msgs.msg import Odometry
+from nav_msgs.srv import GetMap
 
 def normalise(a):
-    reutrn math.atan2(math.sin(a), math.cos(a))
+    return math.atan2(math.sin(a), math.cos(a))
 
 def angle_diff(a, b):
     # Ensures that the difference between the angles lies between -pi and pi.
@@ -50,3 +52,39 @@ def observation_model(z, x, m):
         q = q*(z_hit*prob(dist,sigma_hit**2) + (z_random/z_max))
 
     return q
+
+previous_pose = Odometry()
+current_pose = Odometry()
+
+previous_odata = Odometry()
+current_odata = Odometry()
+
+def odom_callback(data):
+    previous_pose = current_pose
+    current_pose = data.pose.pose
+
+def init():
+    rospy.init_node('grid_localisation')
+    # rospy.Subscriber("odom", Odometry, odom_callback)
+
+    rospy.wait_for_service('static_map') # Hold until map is available
+    rospy.loginfo("Waiting for map ...")
+    try:
+        get_map = rospy.ServiceProxy('static_map', GetMap)
+        map = get_map()
+        rospy.loginfo("Map Recieved!")
+    except rospy.ServiceException, e:
+        print("Service call failed: %s"%e)
+        return
+
+
+    # previous_dist =
+    while not rospy.is_shutdown():
+        prior = motion_model(current_pose, [previous_odata, current_odata], previous_pose)
+
+
+if __name__ == '__main__':
+    try:
+        init()
+    except rospy.ROSInterruptException:
+        pass
