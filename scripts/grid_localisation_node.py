@@ -1,4 +1,5 @@
 import math
+import rospy
 
 def normalise(a):
     reutrn math.atan2(math.sin(a), math.cos(a))
@@ -33,3 +34,19 @@ def motion_model(x_t, u_t, x_t_1):
     p3 = prob(angle_diff(delta_rot2, delta_rot2_hat), alpha1*(delta_rot2_hat**2)+alpha2*(delta_trans_hat**2))
 
     return p1*p2*p3
+
+def observation_model(z, x, m):
+    q = 1
+
+    k = size(z.ranges)
+    for i in range(k):
+        # map the laser end-points onto the global coordinates
+        x_z = x.x + x_sensor*math.cos(x.theta) - y_sensor*math.sin(x.theta) + z.ranges[i]*math.cos(x.theta + theta_sensor)
+        y_z = x.y + y_sensor*math.cos(x.theta) - x_sensor*math.sin(x.theta) + z.ranges[i]*math.sin(x.theta + theta_sensor)
+
+        # find the distance to the nearest object
+        dist = find_dist(x_z, y_z, m)
+
+        q = q*(z_hit*prob(dist,sigma_hit**2) + (z_random/z_max))
+
+    return q
