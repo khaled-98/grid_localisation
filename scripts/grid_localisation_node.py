@@ -33,6 +33,7 @@ def motion_model(x_t, u_t, x_t_1):
     alpha1 = 0.2
     alpha2 = 0.2
     alpha3 = 0.8
+    alpha4 = 0.2
     alpha5 = 0.1
 
     x_prime = x_t[0]
@@ -59,9 +60,12 @@ def motion_model(x_t, u_t, x_t_1):
     delta_trans_hat = math.sqrt((x-x_prime)**2 + (y-y_prime)**2)
     delta_rot2_hat = angle_diff(theta_prime, angle_diff(theta, delta_rot1_hat))
 
-    p1 = prob(angle_diff(delta_rot1, delta_rot1_hat), alpha1*(delta_rot1_hat**2)+alpha2*(delta_trans**2))
-    p2 = prob(delta_trans-delta_trans_hat, alpha3*(delta_trans_hat**2)+alpha4*(delta_rot1_hat**2)+alpha4*(delta_rot2_hat**2))
-    p3 = prob(angle_diff(delta_rot2, delta_rot2_hat), alpha1*(delta_rot2_hat**2)+alpha2*(delta_trans_hat**2))
+    try:    # NOTE: this is only a temporary fix. When the starting and finishing pose are the same, the code divides by zero. I assume that this is not possible because this code is only run when the robot is in motion
+        p1 = prob(angle_diff(delta_rot1, delta_rot1_hat), alpha1*(delta_rot1_hat**2)+alpha2*(delta_trans**2))
+        p2 = prob(delta_trans-delta_trans_hat, alpha3*(delta_trans_hat**2)+alpha4*(delta_rot1_hat**2)+alpha4*(delta_rot2_hat**2))
+        p3 = prob(angle_diff(delta_rot2, delta_rot2_hat), alpha1*(delta_rot2_hat**2)+alpha2*(delta_trans_hat**2))
+    except ZeroDivisionError:
+        return 0
 
     return p1*p2*p3
 
@@ -88,11 +92,12 @@ previous_odata = Odometry().pose.pose
 current_odata = Odometry().pose.pose
 
 def odom_callback(data):
+    global current_odata
     current_odata = data.pose.pose
 
 def init():
     rospy.init_node('grid_localisation')
-    # rospy.Subscriber("odom", Odometry, odom_callback)
+    rospy.Subscriber("odom", Odometry, odom_callback)
 
     rospy.wait_for_service('static_map') # Hold until map is available
     rospy.loginfo("Waiting for map ...")
@@ -108,7 +113,7 @@ def init():
     map_width = map.info.resolution*map.info.width
     map_height = map.info.resolution*map.info.height
 
-    linear_resolution = 0.15 # 15 cm
+    linear_resolution = 1 # 15 cm
     angular_resolution = math.radians(5) # degrees to radians
 
     grid_width = int(math.floor(map_width/linear_resolution))
@@ -124,8 +129,12 @@ def init():
 
     previous_odata = current_odata # Not sure if this is a valid thing to do
 
+    r = rospy.Rate(10) # 10 Hz
     while not rospy.is_shutdown():
         ut = [previous_odata, current_odata]
+        if(ut[0] == ut[1]): # Don't do anything if the robot didn't move
+            continue
+
         for k in range(number_of_cells_in_grid): # line 2 of table 8.1
             [rowk, colk, depthk] = np.unravel_index(k,[grid_width, grid_length, grid_depth])
             xt = [rowk, colk, depthk*angular_resolution]
@@ -137,9 +146,8 @@ def init():
 
                 pbarkt[rowk, colk, depthk] += previous_dist[rowi, coli, depthi]*motion_model(xt, ut, xt_d1)
             # ===========================================
-
-        prior = motion_model(current_pose, [previous_odata, current_odata], previous_pose)
         previous_odata = ut[1] # previous = current
+        r.sleep()
 
 if __name__ == '__main__':
     try:
