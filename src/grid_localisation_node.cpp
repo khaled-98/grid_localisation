@@ -3,6 +3,10 @@
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/GetMap.h"
 #include <cmath>
+#include "geometry_msgs/Vector3.h"
+#include "geometry_msgs/Quaternion.h"
+#include "tf/transform_datatypes.h"
+#include "LinearMath/btMatrix3x3.h"
 
 // Define global variables
 nav_msgs::Odometry current_odom;
@@ -28,9 +32,32 @@ int* ind2sub(int index, int N1, int N2, int N3)
   return sub;
 }
 
+double angle_from_orientation(geometry_msgs::Quaternion orientation)
+{
+  // orientation (geometry_msgs::Quaternion) is transformed to a tf::Quaterion
+  tf::Quaternion quat;
+  tf::quaternionMsgToTF(orientation, quat);
+
+  // the tf::Quaternion has a method to acess roll pitch and yaw
+  double roll, pitch, yaw;
+  tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+
+  return yaw;
+}
+
 bool isNoMovement(nav_msgs::Odometry prev, nav_msgs::Odometry curr)
 {
-  float linear_tol=0.1, angular_tol=
+  double linear_tol=0.1, angular_tol=0.052; // 3 degrees in radians
+  double x = prev.pose.pose.position.x;
+  double y = prev.pose.pose.position.y;
+  double theta = angle_from_orientation(prev.pose.pose.orientation);
+
+  double x_prime = curr.pose.pose.position.x;
+  double y_prime = curr.pose.pose.position.y;
+  double theta_prime = curr.angle_from_orientation(curr.pose.pose.orientation);
+
+  // Check if the distance travelled is less than the tolerance
+
 }
 
 int main(int argc, char **argv)
@@ -50,11 +77,11 @@ int main(int argc, char **argv)
     ROS_INFO("Failed to call map service");
 
   // Define grid resolution
-  float map_width = map_srv.response.map.info.resolution*map_srv.response.map.info.width;
-  float map_height = map_srv.response.map.info.resolution*map_srv.response.map.info.height;
+  double map_width = map_srv.response.map.info.resolution*map_srv.response.map.info.width;
+  double map_height = map_srv.response.map.info.resolution*map_srv.response.map.info.height;
 
-  float linear_resolution = 0.15; // 15 cm
-  float angular_resolution = 0.0873; // 5 degress in radians
+  double linear_resolution = 0.15; // 15 cm
+  double angular_resolution = 0.0873; // 5 degress in radians
 
   int grid_width = std::floor(map_width/linear_resolution);
   int grid_length = std::floor(map_height/linear_resolution);
@@ -63,12 +90,12 @@ int main(int argc, char **argv)
   long number_of_grid_cells = grid_width*grid_length*grid_depth;
 
   // Initialise distribution uniformly
-  std::vector<std::vector<std::vector<float> > > previous_dist (grid_width,std::vector<std::vector<float> >(grid_length,std::vector <float>(grid_depth,1/number_of_grid_cells)));
-  std::vector<std::vector<std::vector<float> > > current_dist;
+  std::vector<std::vector<std::vector<double> > > previous_dist (grid_width,std::vector<std::vector<double> >(grid_length,std::vector <double>(grid_depth,1/number_of_grid_cells)));
+  std::vector<std::vector<std::vector<double> > > current_dist;
   current_dist = previous_dist;
 
   // Initliase with zeros
-  std::vector<std::vector<std::vector<float> > > p_bar_kt (grid_width,std::vector<std::vector<float> >(grid_length,std::vector <float>(grid_depth,0)));
+  std::vector<std::vector<std::vector<double> > > p_bar_kt (grid_width,std::vector<std::vector<double> >(grid_length,std::vector <double>(grid_depth,0)));
 
   previous_odom = current_odom;
 
