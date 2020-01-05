@@ -56,11 +56,11 @@ bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
   double theta_prime = tf::getYaw(curr.getRotation());
 
   // Check if the distance travelled is bigger than the tolerance
-  if(sqrt((pow(x-x_prime, 2))+pow(y-y_prime, 2)) > linear_tol)
+  if(sqrt((pow(x-x_prime, 2))+pow(y-y_prime, 2)) < linear_tol)
     return true;
 
   // Check if the angle travelled is bigger than the tolerance
-  if(fabs(theta - theta_prime) > angular_tol)
+  if(fabs(theta - theta_prime) < angular_tol)
     return true;
 
   return false;
@@ -70,8 +70,6 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "grid_localisation");
   ros::NodeHandle n;
-
-  // ros::Subscriber odom_sub = n.subscribe("odom", 100, odomCallback);
 
   ros::ServiceClient map_srv_client = n.serviceClient<nav_msgs::GetMap>("static_map");
   nav_msgs::GetMap map_srv;
@@ -103,7 +101,6 @@ int main(int argc, char **argv)
   // Initliase with zeros
   std::vector<std::vector<std::vector<double> > > p_bar_kt (grid_width,std::vector<std::vector<double> >(grid_length,std::vector <double>(grid_depth,0)));
 
-  // previous_odom = current_odom;
   tf::TransformListener tf_listener;
   tf::StampedTransform current_transform;
   tf::StampedTransform previous_transform;
@@ -139,6 +136,7 @@ int main(int argc, char **argv)
         ind2sub(i, grid_width, grid_length, grid_depth, &rowi, &coli, &depthi);
       }
     }
+    previous_transform = current_transform;
 
     ROS_INFO("One round completed!");
     ros::spinOnce();
