@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   nav_msgs
+  tf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -208,3 +209,8 @@ include_directories(
 
 add_executable(grid_localisation src/grid_localisation_node.cpp)
 target_link_libraries(grid_localisation ${catkin_LIBRARIES})
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
