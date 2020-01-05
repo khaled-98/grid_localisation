@@ -2,11 +2,12 @@
 #include "nav_msgs/Odometry.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/GetMap.h"
+#include "geometry_msgs/Transform.h"
 #include <cmath>
 #include "geometry_msgs/Vector3.h"
 #include "geometry_msgs/Quaternion.h"
 #include "tf/transform_datatypes.h"
-#include "LinearMath/btMatrix3x3.h"
+#include <tf/transform_listener.h>
 
 // Define global variables
 nav_msgs::Odometry current_odom;
@@ -17,19 +18,17 @@ void odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
   current_odom.pose.pose = msg->pose.pose;
 }
 
-int* ind2sub(int index, int N1, int N2, int N3)
+void ind2sub(int index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
   // Don't event ask
   // https://eli.thegreenplace.net/2015/memory-layout-of-multi-dimensional-arrays/
-  static int sub[3];
   int n1, n2, n3;
   n3 = index % N3;
   n2 = ((index-n3)/N3)%N2;
   n1 = (((index-n3)/N3)-n2)/N2;
-  sub[0] = n1;
-  sub[1] = n2;
-  sub[2] = n3;
-  return sub;
+  *i = n1;
+  *j = n2;
+  *k = n3;
 }
 
 double angle_from_orientation(geometry_msgs::Quaternion orientation)
@@ -45,19 +44,26 @@ double angle_from_orientation(geometry_msgs::Quaternion orientation)
   return yaw;
 }
 
-bool isNoMovement(nav_msgs::Odometry prev, nav_msgs::Odometry curr)
+bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
 {
   double linear_tol=0.1, angular_tol=0.052; // 3 degrees in radians
-  double x = prev.pose.pose.position.x;
-  double y = prev.pose.pose.position.y;
-  double theta = angle_from_orientation(prev.pose.pose.orientation);
+  double x = prev.getOrigin().getX();
+  double y = prev.getOrigin().getY();
+  double theta = tf::getYaw(prev.getRotation());
 
-  double x_prime = curr.pose.pose.position.x;
-  double y_prime = curr.pose.pose.position.y;
-  double theta_prime = curr.angle_from_orientation(curr.pose.pose.orientation);
+  double x_prime = curr.getOrigin().getX();
+  double y_prime = curr.getOrigin().getY();
+  double theta_prime = tf::getYaw(curr.getRotation());
 
-  // Check if the distance travelled is less than the tolerance
+  // Check if the distance travelled is bigger than the tolerance
+  if(sqrt((pow(x-x_prime, 2))+pow(y-y_prime, 2)) > linear_tol)
+    return true;
 
+  // Check if the angle travelled is bigger than the tolerance
+  if(fabs(theta - theta_prime) > angular_tol)
+    return true;
+
+  return false;
 }
 
 int main(int argc, char **argv)
@@ -65,7 +71,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "grid_localisation");
   ros::NodeHandle n;
 
-  ros::Subscriber odom_sub = n.subscribe("odom", 100, odomCallback);
+  // ros::Subscriber odom_sub = n.subscribe("odom", 100, odomCallback);
 
   ros::ServiceClient map_srv_client = n.serviceClient<nav_msgs::GetMap>("static_map");
   nav_msgs::GetMap map_srv;
@@ -97,24 +103,44 @@ int main(int argc, char **argv)
   // Initliase with zeros
   std::vector<std::vector<std::vector<double> > > p_bar_kt (grid_width,std::vector<std::vector<double> >(grid_length,std::vector <double>(grid_depth,0)));
 
-  previous_odom = current_odom;
+  // previous_odom = current_odom;
+  tf::TransformListener tf_listener;
+  tf::StampedTransform current_transform;
+  tf::StampedTransform previous_transform;
+
+  tf_listener.waitForTransform("/base_footprint", "/odom", ros::Time(0), ros::Duration(10.0));
+  tf_listener.lookupTransform("/base_footprint", "/odom", ros::Time(0), previous_transform); // get initial transform
 
   ros::Rate loop_rate(10); // 10 Hz
   while(ros::ok())
   {
-    if(isNoMovement(previous_odom, current_odom)) // Don't do anything if the robot didn't move
+    try{
+      tf_listener.lookupTransform("/base_footprint", "/odom", ros::Time(0), current_transform);
+    }
+    catch (tf::TransformException &ex) {
+      ROS_ERROR("%s",ex.what());
+      ros::Duration(1.0).sleep();
+      continue;
+    }
+
+    if(isNoMovement(previous_transform, current_transform)) // Don't do anything if the robot didn't move
       continue;
 
-    for(long k = 0; k < number_of_grid_cells; k++)
+    ROS_INFO("Round Started!");
+    for(long k = 0; k < number_of_grid_cells; k++) // line 2 of table 8.1
     {
+      int rowk, colk, depthk;
+      ind2sub(k, grid_width, grid_length, grid_depth, &rowk, &colk, &depthk);
+
+      // ================ Prediction =================
       for(long i = 0; i < number_of_grid_cells; i++)
       {
-        int* sub = ind2sub(k, grid_width, grid_length, grid_depth);
-        int rowk = sub[0], colk = sub[1], depthk = sub[2];
-
+        int rowi, coli, depthi;
+        ind2sub(i, grid_width, grid_length, grid_depth, &rowi, &coli, &depthi);
       }
     }
 
+    ROS_INFO("One round completed!");
     ros::spinOnce();
     loop_rate.sleep();
   }
