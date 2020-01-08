@@ -183,6 +183,7 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   return p1*p2*p3;
 }
 
+
 // double measurement_model(, double* xt, )
 
 ros::Time latest_laser_scan_time;
@@ -191,6 +192,59 @@ ros::Time latest_laser_scan_time;
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
   latest_laser_scan_time = msg->header.stamp;
+}
+
+int* ind2map (int ind, int map_height)
+{
+  static int coord[2];
+  coord[1] = ind % map_height;
+  coord[0] = (ind - coord[1])/map_height;
+  return coord;
+}
+
+float measure_distance(int index_a, int index_b, int map_width, int map_height, float resolution)
+{
+  float x, y, x_prime, y_prime;
+  int* coord;
+  coord = ind2map(index_a, map_height);
+  x = coord[0]*resolution;
+  y = coord[1]*resolution;
+
+  coord = ind2map(index_b, map_height);
+  x_prime = coord[0]*resolution;
+  y_prime = coord[1]*resolution;
+
+  return sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
+}
+
+float* compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
+{
+  // TODO: find a more efficient implementation
+  // TODO: calculate the probabilities in this function
+  int map_width = map.info.width;
+  int map_height = map.info.height;
+  float resolution = map.info.resolution;
+
+  static float dist_map[1000000] = {};
+  for (int i = 0; i < map_width*map_height; i++)
+  {
+    if(map.data[i] == 100) // if there's an obstacle in this cells
+    {
+      dist_map[i] = 0;
+      continue;
+    }
+
+    for (int j = 0; j < map_width*map_height; j++)
+    {
+      if(map.data[j] != 100) // if this is not an obstacle
+        continue;
+
+      float temp = measure_distance(i, j, map_width, map_height, resolution);
+      if((dist_map[i] == 0) || (temp < dist_map[i]))
+        dist_map[i] = temp;
+    }
+  }
+  return dist_map;
 }
 
 int main(int argc, char **argv)
@@ -207,6 +261,11 @@ int main(int argc, char **argv)
     ROS_INFO("Map received!");
   else
     ROS_INFO("Failed to call map service");
+
+  ROS_INFO("Calculating likelihood field...");
+  float* dist_map = compute_likelihood_field(map_srv.response.map);
+
+  ROS_INFO("Completed likelihood field calculation");
 
   // Define grid resolution
   double map_width = map_srv.response.map.info.resolution*map_srv.response.map.info.width;
@@ -297,7 +356,7 @@ int main(int argc, char **argv)
         p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
       }
       // =============================================
-      
+
       // Calculate the unnormalised p_kt
       // current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*measurement_model(zt, xt, m);
     }
