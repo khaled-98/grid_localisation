@@ -9,13 +9,32 @@
 #include "tf/transform_datatypes.h"
 #include <tf/transform_listener.h>
 
-// Define global variables
-nav_msgs::Odometry current_odom;
-nav_msgs::Odometry previous_odom;
-
-void odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
+float atan2_approximation(float y, float x)
 {
-  current_odom.pose.pose = msg->pose.pose;
+  //https://gist.github.com/volkansalma/2972237#file-atan2_approximation-c-L15
+
+    //http://pubs.opengroup.org/onlinepubs/009695399/functions/atan2.html
+    //Volkan SALMA
+
+  const float ONEQTR_PI = M_PI / 4.0;
+	const float THRQTR_PI = 3.0 * M_PI / 4.0;
+	float r, angle;
+	float abs_y = fabs(y) + 1e-10f;      // kludge to prevent 0/0 condition
+	if ( x < 0.0f )
+	{
+		r = (x + abs_y) / (abs_y - x);
+		angle = THRQTR_PI;
+	}
+	else
+	{
+		r = (x - abs_y) / (x + abs_y);
+		angle = ONEQTR_PI;
+	}
+	angle += (0.1963f * r * r - 0.9817f) * r;
+	if ( y < 0.0f )
+		return( -angle );     // negate if in quad III or IV
+	else
+		return( angle );
 }
 
 void ind2sub(int index, int N1, int N2, int N3, int* i, int* j, int* k)
@@ -68,7 +87,11 @@ bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
 
 double normalise(double z)
 {
-  return atan2(sin(z),cos(z));
+  // TODO: check maths: https://stackoverflow.com/questions/1628386/normalise-orientation-between-0-and-360
+  const double width = 2*M_PI;   //
+  const double offsetValue = z - (-M_PI) ;   // value relative to 0
+
+  return ( offsetValue - ( floor( offsetValue / width ) * width ) ) + (-M_PI) ;
 }
 
 double angle_diff(double a, double b)
@@ -91,30 +114,30 @@ double prob(double a, double b)
   return (1/sqrt(2*M_PI*b))*exp(-0.5*(pow(a, 2)/b));
 }
 
-double motion_model(double* xt, tf::StampedTransform prev, tf::StampedTransform curr, double* xt_d1)
+double motion_model(double* xt, double* ut, double* xt_d1)
 {
   float alpha1 = 0.2, alpha2 = 0.2, alpha3=0.8, alpha4=0.2, alpha5=0.1;
   double x_prime = xt[0];
   double y_prime = xt[1];
   double theta_prime = xt[2];
 
-  double x_bar = prev.getOrigin().getX();
-  double y_bar = prev.getOrigin().getY();
-  double theta_bar = tf::getYaw(prev.getRotation());
+  double x_bar = ut[0];
+  double y_bar = ut[1];
+  double theta_bar = ut[2];
 
-  double x_bar_prime = curr.getOrigin().getX();
-  double y_bar_prime = curr.getOrigin().getY();
-  double theta_bar_prime = tf::getYaw(curr.getRotation());
+  double x_bar_prime = ut[3];
+  double y_bar_prime = ut[4];
+  double theta_bar_prime = ut[5];
 
   double x = xt_d1[0];
   double y = xt_d1[1];
   double theta = xt_d1[2];
 
-  double delta_rot1 = angle_diff(atan2(y_bar_prime-y_bar, x_bar_prime-x_bar), theta_bar);
-  double delta_trans = sqrt(pow((x_bar - x_bar_prime), 2) + pow((y_bar - y_bar_prime), 2));
-  double delta_rot2 = angle_diff(theta_bar_prime, angle_diff(theta_bar, delta_rot1)); // NOTE: for some reason AMCL doesn't subtract the second theta
+  double delta_rot1 = angle_diff(atan2_approximation(y_bar_prime-y_bar, x_bar_prime-x_bar), theta_bar);
+  double delta_trans =  sqrt(pow((x_bar - x_bar_prime), 2) + pow((y_bar - y_bar_prime), 2));
+  double delta_rot2 =  angle_diff(theta_bar_prime, angle_diff(theta_bar, delta_rot1)); // NOTE: for some reason AMCL doesn't subtract the second theta
 
-  double delta_rot1_hat = angle_diff(atan2(y_prime-y, x_prime-x), theta);
+  double delta_rot1_hat =  angle_diff(atan2(y_prime-y, x_prime-x), theta);
   double delta_trans_hat = sqrt(pow((x-x_prime), 2) + pow((y-y_prime), 2));
   double delta_rot2_hat = angle_diff(theta_prime, angle_diff(theta, delta_rot1_hat));
 
@@ -153,12 +176,23 @@ int main(int argc, char **argv)
   long number_of_grid_cells = grid_width*grid_length*grid_depth;
 
   // Initialise distribution uniformly
-  std::vector<std::vector<std::vector<double> > > previous_dist (grid_width,std::vector<std::vector<double> >(grid_length,std::vector <double>(grid_depth,1/number_of_grid_cells)));
-  std::vector<std::vector<std::vector<double> > > current_dist;
-  current_dist = previous_dist;
+  double previous_dist[100][100][73];
+  double current_dist[100][100][73];
+  double temp_prob = 1/number_of_grid_cells;
+  for (int r = 0; r < 100; r++)
+  {
+    for (int c = 0; c < 100; c++)
+    {
+      for (int d = 0; d < 73; d++)
+      {
+        previous_dist[r][c][d] = temp_prob;
+        current_dist[r][c][d] = temp_prob;
+      }
+    }
+  }
 
   // Initliase with zeros
-  std::vector<std::vector<std::vector<double> > > p_bar_kt (grid_width,std::vector<std::vector<double> >(grid_length,std::vector <double>(grid_depth,0)));
+  double p_bar_kt[100][100][73];
 
   tf::TransformListener tf_listener;
   tf::StampedTransform current_transform;
@@ -168,6 +202,7 @@ int main(int argc, char **argv)
   tf_listener.lookupTransform("/base_footprint", "/odom", ros::Time(0), previous_transform); // get initial transform
 
   ros::Rate loop_rate(10); // 10 Hz
+  double test[100][100][73];
   while(ros::ok())
   {
     try{
@@ -178,6 +213,9 @@ int main(int argc, char **argv)
       ros::Duration(1.0).sleep();
       continue;
     }
+
+    double ut[6] = {previous_transform.getOrigin().getX(), previous_transform.getOrigin().getY(), tf::getYaw(previous_transform.getRotation()),
+                    current_transform.getOrigin().getX(), current_transform.getOrigin().getY(), tf::getYaw(current_transform.getRotation())};
 
     if(isNoMovement(previous_transform, current_transform)) // Don't do anything if the robot didn't move
       continue;
@@ -205,7 +243,7 @@ int main(int argc, char **argv)
         xt_d1[1] = coli*linear_resolution;
         xt_d1[2] = depthi*angular_resolution;
 
-        p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, previous_transform, current_transform, xt_d1);
+        p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
       }
     }
     previous_transform = current_transform;
