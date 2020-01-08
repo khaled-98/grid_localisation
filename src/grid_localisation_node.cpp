@@ -8,6 +8,7 @@
 #include "geometry_msgs/Quaternion.h"
 #include "tf/transform_datatypes.h"
 #include <tf/transform_listener.h>
+#include "sensor_msgs/LaserScan.h"
 
 float atan2_approximation(float y, float x)
 {
@@ -182,11 +183,22 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   return p1*p2*p3;
 }
 
+// double measurement_model(, double* xt, )
+
+ros::Time latest_laser_scan_time;
+
+
+void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
+{
+  latest_laser_scan_time = msg->header.stamp;
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "grid_localisation");
   ros::NodeHandle n;
 
+  ros::Subscriber laser_sub = n.subscribe("base_scan", 100, laser_callback);
   ros::ServiceClient map_srv_client = n.serviceClient<nav_msgs::GetMap>("static_map");
   nav_msgs::GetMap map_srv;
 
@@ -241,8 +253,12 @@ int main(int argc, char **argv)
   double test[100][100][73];
   while(ros::ok())
   {
+    // Take a laser scan and get the transform at this scan.
+    ros::spinOnce();
+    ros::Time current_laser_scan_time = latest_laser_scan_time;
     try{
-      tf_listener.lookupTransform("/base_footprint", "/odom", ros::Time(0), current_transform);
+      tf_listener.waitForTransform("/base_footprint", "/odom", current_laser_scan_time, ros::Duration(3.0));
+      tf_listener.lookupTransform("/base_footprint", "/odom", current_laser_scan_time, current_transform);
     }
     catch (tf::TransformException &ex) {
       ROS_ERROR("%s",ex.what());
@@ -267,7 +283,6 @@ int main(int argc, char **argv)
       xt[1] = colk*linear_resolution;
       xt[2] = depthk*angular_resolution;
 
-      // TODO: BE CAREFUL ABOUT WHEN YOU TAKE THE TRANSFORM READINGS
       // ================ Prediction =================
       for(long i = 0; i < number_of_grid_cells; i++)
       {
@@ -281,11 +296,15 @@ int main(int argc, char **argv)
 
         p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
       }
+      // =============================================
+      
+      // Calculate the unnormalised p_kt
+      // current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*measurement_model(zt, xt, m);
     }
+    // normalise p_kt and publish the transform
     previous_transform = current_transform;
 
     ROS_INFO("One round completed!");
-    ros::spinOnce();
     loop_rate.sleep();
   }
 
