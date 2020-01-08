@@ -109,9 +109,43 @@ double angle_diff(double a, double b)
     return(d2);
 }
 
+float approx_sqrt( float number )
+{
+  // https://www.geeksforgeeks.org/fast-inverse-square-root/
+  // https://www.beyond3d.com/content/articles/8/
+  const float threehalfs = 1.5F;
+
+  float x2 = number * 0.5F;
+  float y = number;
+
+  // evil floating point bit level hacking
+  long i = * ( long * ) &y;
+
+  // value is pre-assumed
+  i = 0x5f3759df - ( i >> 1 );
+  y = * ( float * ) &i;
+
+  // 1st iteration
+  y = y * ( threehalfs - ( x2 * y * y ) );
+
+  // 2nd iteration, this can be removed
+  y = y * ( threehalfs - ( x2 * y * y ) );
+
+  return 1/y;
+}
+
+double approx_exp(double x)
+{
+  // https://codingforspeed.com/using-faster-exponential-approximation/
+  x = 1.0 + x / 256.0;
+  x *= x; x *= x; x *= x; x *= x;
+  x *= x; x *= x; x *= x; x *= x;
+  return x;
+}
+
 double prob(double a, double b)
 {
-  return (1/sqrt(2*M_PI*b))*exp(-0.5*(pow(a, 2)/b));
+  return (1/approx_sqrt(2*M_PI*b))*approx_exp(-0.5*((a*a)/b));
 }
 
 double motion_model(double* xt, double* ut, double* xt_d1)
@@ -134,16 +168,16 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   double theta = xt_d1[2];
 
   double delta_rot1 = angle_diff(atan2_approximation(y_bar_prime-y_bar, x_bar_prime-x_bar), theta_bar);
-  double delta_trans =  sqrt(pow((x_bar - x_bar_prime), 2) + pow((y_bar - y_bar_prime), 2));
+  double delta_trans =  approx_sqrt((x_bar - x_bar_prime)*(x_bar - x_bar_prime) + (y_bar - y_bar_prime)*(y_bar - y_bar_prime));
   double delta_rot2 =  angle_diff(theta_bar_prime, angle_diff(theta_bar, delta_rot1)); // NOTE: for some reason AMCL doesn't subtract the second theta
 
-  double delta_rot1_hat =  angle_diff(atan2(y_prime-y, x_prime-x), theta);
-  double delta_trans_hat = sqrt(pow((x-x_prime), 2) + pow((y-y_prime), 2));
+  double delta_rot1_hat =  angle_diff(atan2_approximation(y_prime-y, x_prime-x), theta);
+  double delta_trans_hat = approx_sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
   double delta_rot2_hat = angle_diff(theta_prime, angle_diff(theta, delta_rot1_hat));
 
-  double p1 = prob(angle_diff(delta_rot1, delta_rot1_hat), alpha1*(pow(delta_rot1_hat,2))+alpha2*(pow(delta_trans, 2)));
-  double p2 = prob(delta_trans-delta_trans_hat, alpha3*(pow(delta_trans_hat, 2))+alpha4*(pow(delta_rot1_hat, 2))+alpha4*(pow(delta_rot2_hat, 2)));
-  double p3 = prob(angle_diff(delta_rot2, delta_rot2_hat), alpha1*(pow(delta_rot2_hat, 2))+alpha2*(pow(delta_trans_hat, 2)));
+  double p1 = prob(angle_diff(delta_rot1, delta_rot1_hat), alpha1*(delta_rot1_hat*delta_rot1_hat)+alpha2*(delta_trans*delta_trans));
+  double p2 = prob(delta_trans-delta_trans_hat, alpha3*(delta_trans_hat*delta_trans_hat)+alpha4*(delta_rot1_hat*delta_rot1_hat)+alpha4*(delta_rot2_hat*delta_rot2_hat));
+  double p3 = prob(angle_diff(delta_rot2, delta_rot2_hat), alpha1*(delta_rot2_hat*delta_rot2_hat)+alpha2*(delta_trans_hat*delta_trans_hat));
 
   return p1*p2*p3;
 }
@@ -176,6 +210,7 @@ int main(int argc, char **argv)
   long number_of_grid_cells = grid_width*grid_length*grid_depth;
 
   // Initialise distribution uniformly
+  ROS_INFO("Initialising distribution...");
   double previous_dist[100][100][73];
   double current_dist[100][100][73];
   double temp_prob = 1/number_of_grid_cells;
@@ -190,6 +225,7 @@ int main(int argc, char **argv)
       }
     }
   }
+  ROS_INFO("Initialised...");
 
   // Initliase with zeros
   double p_bar_kt[100][100][73];
