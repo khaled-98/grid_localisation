@@ -38,7 +38,7 @@ float atan2_approximation(float y, float x)
 		return( angle );
 }
 
-void ind2sub(int index, int N1, int N2, int N3, int* i, int* j, int* k)
+void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
   // Don't event ask
   // https://eli.thegreenplace.net/2015/memory-layout-of-multi-dimensional-arrays/
@@ -180,18 +180,54 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   double p2 = prob(delta_trans-delta_trans_hat, alpha3*(delta_trans_hat*delta_trans_hat)+alpha4*(delta_rot1_hat*delta_rot1_hat)+alpha4*(delta_rot2_hat*delta_rot2_hat));
   double p3 = prob(angle_diff(delta_rot2, delta_rot2_hat), alpha1*(delta_rot2_hat*delta_rot2_hat)+alpha2*(delta_trans_hat*delta_trans_hat));
 
+  if(isinf(p1*p2*p3))
+    return 0.0; // temporary fix
+
   return p1*p2*p3;
 }
 
+int map2ind (int x, int y, int map_height)
+{
+  return x*map_height + y;
+}
 
-// double measurement_model(, double* xt, )
+float measurement_model(float min_angle, float angle_increment, float min_range, float max_range, std::vector<float> ranges, double* xt, double* sensor_pose, float* dist_map, int map_height)
+{
+
+  float q = 1, z_hit = 0.5, z_random = 0.5, z_max = 0.05, sigma_hit = 0.2;
+  float z_rand_max = z_random/z_max;
+  for(int i = 0; i < 30; i++) // check 30 laser rays
+  {
+    if((ranges[i*5] == max_range) || (ranges[i*5] == min_range))
+      continue;
+
+    float x_zkt = floor(xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i*5]*cos(xt[2] + (min_angle+angle_increment*i*5))); // assume that the sensor is not mounted at angle
+    float y_zkt = floor(xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i*5]*sin(xt[2] + (min_angle+angle_increment*i*5))); // assume that the sensor is not mounted at angle
+
+    int index = map2ind(int(x_zkt), int(y_zkt), map_height);
+    float dist = dist_map[index];
+
+    q *= (z_hit*prob(dist, sigma_hit) + z_rand_max);
+  }
+  return q;
+}
 
 ros::Time latest_laser_scan_time;
+std::vector<float> latest_laser_ranges;
+float laser_angle_min;
+float laser_angle_increment;
+float laser_range_max;
+float laser_range_min;
 
 
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
   latest_laser_scan_time = msg->header.stamp;
+  latest_laser_ranges = msg->ranges;
+  laser_angle_min = msg->angle_min;
+  laser_angle_increment = msg->angle_increment;
+  laser_range_max = msg->range_max;
+  laser_range_min = msg->range_min;
 }
 
 int* ind2map (int ind, int map_height)
@@ -282,14 +318,14 @@ int main(int argc, char **argv)
 
   // Initialise distribution uniformly
   ROS_INFO("Initialising distribution...");
-  double previous_dist[100][100][73];
-  double current_dist[100][100][73];
-  double temp_prob = 1/number_of_grid_cells;
-  for (int r = 0; r < 100; r++)
+  double previous_dist[50][50][73];
+  double current_dist[50][50][73];
+  double temp_prob = 1.0/number_of_grid_cells;
+  for (int r = 0; r < grid_length; r++)
   {
-    for (int c = 0; c < 100; c++)
+    for (int c = 0; c < grid_width; c++)
     {
-      for (int d = 0; d < 73; d++)
+      for (int d = 0; d < grid_depth; d++)
       {
         previous_dist[r][c][d] = temp_prob;
         current_dist[r][c][d] = temp_prob;
@@ -299,22 +335,28 @@ int main(int argc, char **argv)
   ROS_INFO("Initialised...");
 
   // Initliase with zeros
-  double p_bar_kt[100][100][73];
+  double p_bar_kt[50][50][73] = {};
 
   tf::TransformListener tf_listener;
   tf::StampedTransform current_transform;
   tf::StampedTransform previous_transform;
+  tf::StampedTransform laser_transform;
 
   tf_listener.waitForTransform("/base_footprint", "/odom", ros::Time(0), ros::Duration(10.0));
   tf_listener.lookupTransform("/base_footprint", "/odom", ros::Time(0), previous_transform); // get initial transform
 
+  tf_listener.waitForTransform("/base_footprint", "/base_laser_front_link", ros::Time(0), ros::Duration(10.0));
+  tf_listener.lookupTransform("/base_footprint", "/base_laser_front_link", ros::Time(0), laser_transform);
+  double laser_pose[3] = {laser_transform.getOrigin().getX(), laser_transform.getOrigin().getY(), tf::getYaw(laser_transform.getRotation())};
+
   ros::Rate loop_rate(10); // 10 Hz
-  double test[100][100][73];
   while(ros::ok())
   {
+    double sum_of_dist_values = 0.0;
     // Take a laser scan and get the transform at this scan.
     ros::spinOnce();
     ros::Time current_laser_scan_time = latest_laser_scan_time;
+    std::vector<float> current_laser_ranges = latest_laser_ranges;
     try{
       tf_listener.waitForTransform("/base_footprint", "/odom", current_laser_scan_time, ros::Duration(3.0));
       tf_listener.lookupTransform("/base_footprint", "/odom", current_laser_scan_time, current_transform);
@@ -337,7 +379,11 @@ int main(int argc, char **argv)
       int rowk, colk, depthk;
       double xt[3];
 
-      ind2sub(k, grid_width, grid_length, grid_depth, &rowk, &colk, &depthk);
+      ind2sub(k, grid_length, grid_width, grid_depth, &rowk, &colk, &depthk);
+      depthk = k % grid_depth;
+      colk = ((k - depthk)/grid_depth) % grid_width;
+      rowk = (((k - depthk)/grid_depth) - colk) / grid_width;
+
       xt[0] = rowk*linear_resolution;
       xt[1] = colk*linear_resolution;
       xt[2] = depthk*angular_resolution;
@@ -348,7 +394,9 @@ int main(int argc, char **argv)
         int rowi, coli, depthi;
         double xt_d1[3];
 
-        ind2sub(i, grid_width, grid_length, grid_depth, &rowi, &coli, &depthi);
+        depthi = i % grid_depth;
+        coli = ((i - depthi)/grid_depth) % grid_width;
+        rowi = (((i - depthk)/grid_depth) - coli) / grid_width;
         xt_d1[0] = rowi*linear_resolution;
         xt_d1[1] = coli*linear_resolution;
         xt_d1[2] = depthi*angular_resolution;
@@ -356,11 +404,28 @@ int main(int argc, char **argv)
         p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
       }
       // =============================================
-
       // Calculate the unnormalised p_kt
-      // current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*measurement_model(zt, xt, m);
+      float temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, dist_map, map_srv.response.map.info.height);
+      current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
+      sum_of_dist_values += current_dist[rowk][colk][depthk];
     }
+
+    int max_r=0, max_c=0, max_d=0;
+    double max_prob = 0;
+
     // normalise p_kt and publish the transform
+    for(int row = 0; row < grid_length; row++)
+    {
+      for(int col = 0; col < grid_width; col++)
+      {
+        for(int dep = 0; dep < grid_depth; dep++)
+        {
+          current_dist[row][col][dep] /= sum_of_dist_values;
+          previous_dist[row][col][dep] = current_dist[row][col][dep];
+        }
+      }
+    }
+
     previous_transform = current_transform;
 
     ROS_INFO("One round completed!");
