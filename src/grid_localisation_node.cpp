@@ -98,19 +98,31 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   double y = xt_d1[1];
   double theta = xt_d1[2];
 
-  double delta_rot1 = angle_diff(atan2_approximation(y_bar_prime-y_bar, x_bar_prime-x_bar), theta_bar);
-  double delta_trans =  approx_sqrt((x_bar - x_bar_prime)*(x_bar - x_bar_prime) + (y_bar - y_bar_prime)*(y_bar - y_bar_prime));
-  double delta_rot2 =  angle_diff(theta_bar_prime, angle_diff(theta_bar, delta_rot1)); // NOTE: for some reason AMCL doesn't subtract the second theta
+  double delta_rot1 = atan2(y_bar_prime-y_bar, x_bar_prime-x_bar) - theta_bar;
+  double delta_trans =  sqrt((x_bar - x_bar_prime)*(x_bar - x_bar_prime) + (y_bar - y_bar_prime)*(y_bar - y_bar_prime));
+  double delta_rot2 =  theta_bar_prime - theta_bar - delta_rot1; // NOTE: for some reason AMCL doesn't subtract the second theta
 
-  double delta_rot1_hat =  angle_diff(atan2_approximation(y_prime-y, x_prime-x), theta);
-  double delta_trans_hat = approx_sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
-  double delta_rot2_hat = angle_diff(theta_prime, angle_diff(theta, delta_rot1_hat));
+  double delta_rot1_hat =  atan2(y_prime-y, x_prime-x) - theta;
+  double delta_trans_hat = sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
+  double delta_rot2_hat = theta_prime - theta - delta_rot1_hat;
 
-  double p1 = prob(angle_diff(delta_rot1, delta_rot1_hat), alpha1*(delta_rot1_hat*delta_rot1_hat)+alpha2*(delta_trans*delta_trans));
-  double p2 = prob(delta_trans-delta_trans_hat, alpha3*(delta_trans_hat*delta_trans_hat)+alpha4*(delta_rot1_hat*delta_rot1_hat)+alpha4*(delta_rot2_hat*delta_rot2_hat));
-  double p3 = prob(angle_diff(delta_rot2, delta_rot2_hat), alpha1*(delta_rot2_hat*delta_rot2_hat)+alpha2*(delta_trans_hat*delta_trans_hat));
+  double a, b;
+  a = angle_diff(delta_rot1, delta_rot1_hat);
+  if(a>M_PI || a<-M_PI)
+  b = alpha1*(delta_rot1_hat*delta_rot1_hat)+alpha2*(delta_trans*delta_trans);
+  double p1 = prob(a, b);
+
+  a = delta_trans-delta_trans_hat;
+  b = alpha3*(delta_trans_hat*delta_trans_hat)+alpha4*(delta_rot1_hat*delta_rot1_hat)+alpha4*(delta_rot2_hat*delta_rot2_hat);
+  double p2 = prob(a, b);
+
+  a = angle_diff(delta_rot2, delta_rot2_hat);
+
+  b = alpha1*(delta_rot2_hat*delta_rot2_hat)+alpha2*(delta_trans_hat*delta_trans_hat);
+  double p3 = prob(a, b);
 
   if(isinf(p1*p2*p3))
+  if(isnan(p1*p2*p3))
     return 0.0; // temporary fix
 
   return p1*p2*p3;
