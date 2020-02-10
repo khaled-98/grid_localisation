@@ -185,7 +185,9 @@ float measure_distance(int index_a, int index_b, int map_width, int map_height, 
   return sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
 }
 
-float* compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
+nav_msgs::OccupancyGrid likelihood_field;
+
+std::vector<float>& compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
 {
   // TODO: find a more efficient implementation
   // TODO: calculate the probabilities in this function
