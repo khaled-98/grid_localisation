@@ -65,7 +65,7 @@ double angle_diff(double a, double b)
 
 double prob(double a, double b)
 {
-  return (1/approx_sqrt(2*M_PI*b))*approx_exp(-0.5*((a*a)/b));
+  return (1/sqrt(2*M_PI*b*b))*exp(-0.5*((a*a)/(b*b)));
 }
 
 double motion_model(double* xt, double* ut, double* xt_d1)
