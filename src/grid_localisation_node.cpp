@@ -10,34 +10,6 @@
 #include <tf/transform_listener.h>
 #include "sensor_msgs/LaserScan.h"
 
-float atan2_approximation(float y, float x)
-{
-  //https://gist.github.com/volkansalma/2972237#file-atan2_approximation-c-L15
-
-    //http://pubs.opengroup.org/onlinepubs/009695399/functions/atan2.html
-    //Volkan SALMA
-
-  const float ONEQTR_PI = M_PI / 4.0;
-	const float THRQTR_PI = 3.0 * M_PI / 4.0;
-	float r, angle;
-	float abs_y = fabs(y) + 1e-10f;      // kludge to prevent 0/0 condition
-	if ( x < 0.0f )
-	{
-		r = (x + abs_y) / (abs_y - x);
-		angle = THRQTR_PI;
-	}
-	else
-	{
-		r = (x - abs_y) / (x + abs_y);
-		angle = ONEQTR_PI;
-	}
-	angle += (0.1963f * r * r - 0.9817f) * r;
-	if ( y < 0.0f )
-		return( -angle );     // negate if in quad III or IV
-	else
-		return( angle );
-}
-
 void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
   // Don't event ask
@@ -49,19 +21,6 @@ void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
   *i = n1;
   *j = n2;
   *k = n3;
-}
-
-double angle_from_orientation(geometry_msgs::Quaternion orientation)
-{
-  // orientation (geometry_msgs::Quaternion) is transformed to a tf::Quaterion
-  tf::Quaternion quat;
-  tf::quaternionMsgToTF(orientation, quat);
-
-  // the tf::Quaternion has a method to acess roll pitch and yaw
-  double roll, pitch, yaw;
-  tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-
-  return yaw;
 }
 
 bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
@@ -86,15 +45,6 @@ bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
   return false;
 }
 
-double normalise(double z)
-{
-  // TODO: check maths: https://stackoverflow.com/questions/1628386/normalise-orientation-between-0-and-360
-  const double width = 2*M_PI;   //
-  const double offsetValue = z - (-M_PI) ;   // value relative to 0
-
-  return ( offsetValue - ( floor( offsetValue / width ) * width ) ) + (-M_PI) ;
-}
-
 double angle_diff(double a, double b)
 {
   double d1, d2;
@@ -110,38 +60,18 @@ double angle_diff(double a, double b)
     return(d2);
 }
 
-float approx_sqrt( float number )
-{
-  // https://www.geeksforgeeks.org/fast-inverse-square-root/
-  // https://www.beyond3d.com/content/articles/8/
-  const float threehalfs = 1.5F;
+  angle = fmod(a, 2.0*M_PI); // limit the angle from 0 to 2*Pi
 
-  float x2 = number * 0.5F;
-  float y = number;
+  if(angle<=M_PI && angle>-M_PI)
+    return angle;
 
-  // evil floating point bit level hacking
-  long i = * ( long * ) &y;
+  if(angle > M_PI)
+  {
+    // angle is between pi and 2*pi so it needs to wrap around
+    return -M_PI + fmod(angle, M_PI);
+  }
 
-  // value is pre-assumed
-  i = 0x5f3759df - ( i >> 1 );
-  y = * ( float * ) &i;
-
-  // 1st iteration
-  y = y * ( threehalfs - ( x2 * y * y ) );
-
-  // 2nd iteration, this can be removed
-  y = y * ( threehalfs - ( x2 * y * y ) );
-
-  return 1/y;
-}
-
-double approx_exp(double x)
-{
-  // https://codingforspeed.com/using-faster-exponential-approximation/
-  x = 1.0 + x / 256.0;
-  x *= x; x *= x; x *= x; x *= x;
-  x *= x; x *= x; x *= x; x *= x;
-  return x;
+  return 0.0;
 }
 
 double prob(double a, double b)
