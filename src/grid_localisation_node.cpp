@@ -122,10 +122,11 @@ int map2ind (int x, int y, int map_height)
   return x*map_height + y;
 }
 
-float measurement_model(float min_angle, float angle_increment, float min_range, float max_range, std::vector<float> ranges, double* xt, double* sensor_pose, float* dist_map, int map_height)
+double measurement_model(float min_angle, float angle_increment, float min_range, float max_range, std::vector<float> ranges, double* xt, double* sensor_pose, std::vector<float>& dist_map, int map_height)
 {
 
-  float q = 1, z_hit = 0.5, z_random = 0.5, z_max = 0.05, sigma_hit = 0.2;
+  double q = 1.0;
+  float z_hit = 0.95, z_random = 0.05, z_max = 0.05, sigma_hit = 0.2;
   float z_rand_max = z_random/z_max;
   for(int i = 0; i < 30; i++) // check 30 laser rays
   {
