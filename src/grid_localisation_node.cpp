@@ -255,6 +255,7 @@ int main(int argc, char **argv)
   double previous_dist[50][50][73];
   double current_dist[50][50][73];
   double temp_prob = 1.0/number_of_grid_cells;
+  double p_bar_kt[50][50][73] = {};
   for (int r = 0; r < grid_length; r++)
   {
     for (int c = 0; c < grid_width; c++)
@@ -267,9 +268,6 @@ int main(int argc, char **argv)
     }
   }
   ROS_INFO("Initialised...");
-
-  // Initliase with zeros
-  double p_bar_kt[50][50][73] = {};
 
   tf::TransformListener tf_listener;
   tf::StampedTransform current_transform;
