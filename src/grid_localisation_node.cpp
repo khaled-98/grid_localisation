@@ -97,7 +97,7 @@ double motion_model(double* xt, double* ut, double* xt_d1)
 
   double a, b;
   a = angle_diff(delta_rot1, delta_rot1_hat);
-  if(a>M_PI || a<-M_PI)
+
   b = alpha1*(delta_rot1_hat*delta_rot1_hat)+alpha2*(delta_trans*delta_trans);
   double p1 = prob(a, b);
 
@@ -110,7 +110,6 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   b = alpha1*(delta_rot2_hat*delta_rot2_hat)+alpha2*(delta_trans_hat*delta_trans_hat);
   double p3 = prob(a, b);
 
-  if(isinf(p1*p2*p3))
   if(isnan(p1*p2*p3))
     return 0.0; // temporary fix
 
