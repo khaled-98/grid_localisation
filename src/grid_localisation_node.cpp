@@ -129,17 +129,18 @@ double measurement_model(float min_angle, float angle_increment, float min_range
   float z_rand_max = z_random/z_max;
   for(int i = 0; i < 30; i++) // check 30 laser rays
   {
-    if((ranges[i*5] == max_range) || (ranges[i*5] == min_range))
+    if((ranges[i*12] == max_range) || (ranges[i*12] == min_range))
       continue;
 
-    float x_zkt = floor(xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i*5]*cos(xt[2] + (min_angle+angle_increment*i*5))); // assume that the sensor is not mounted at angle
-    float y_zkt = floor(xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i*5]*sin(xt[2] + (min_angle+angle_increment*i*5))); // assume that the sensor is not mounted at angle
+    float x_zkt = floor(xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i*5]*cos(xt[2] + (min_angle+angle_increment*i*12))); // assume that the sensor is not mounted at angle
+    float y_zkt = floor(xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i*5]*sin(xt[2] + (min_angle+angle_increment*i*12))); // assume that the sensor is not mounted at angle
 
     int index = map2ind(int(x_zkt), int(y_zkt), map_height);
     float dist = dist_map[index];
 
     q *= (z_hit*prob(dist, sigma_hit) + z_rand_max);
   }
+
   return q;
 }
 
