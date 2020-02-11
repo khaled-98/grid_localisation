@@ -233,8 +233,8 @@ int main(int argc, char **argv)
     ROS_INFO("Failed to call map service");
 
   ROS_INFO("Calculating likelihood field...");
-  float* dist_map = compute_likelihood_field(map_srv.response.map);
-
+  std::vector<float>& dist_map = compute_likelihood_field(map_srv.response.map);
+  // TODO: provide the option to publish likelihood_field
   ROS_INFO("Completed likelihood field calculation");
 
   // Define grid resolution
