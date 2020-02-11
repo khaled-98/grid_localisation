@@ -195,7 +195,7 @@ std::vector<float>& compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
   int map_height = map.info.height;
   float resolution = map.info.resolution;
 
-  static float dist_map[1000000] = {};
+  static std::vector<float> dist_map(1000000, 0.0);
   for (int i = 0; i < map_width*map_height; i++)
   {
     if(map.data[i] == 100) // if there's an obstacle in this cells
