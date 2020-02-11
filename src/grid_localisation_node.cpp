@@ -250,6 +250,11 @@ int main(int argc, char **argv)
 
   long number_of_grid_cells = grid_width*grid_length*grid_depth;
 
+  // Get map origin
+  // TODO: account for origin rotation
+  double map_x = map_srv.response.map.info.origin.position.x;
+  double map_y = map_srv.response.map.info.origin.position.y;
+
   // Initialise distribution uniformly
   ROS_INFO("Initialising distribution...");
   double previous_dist[50][50][73];
@@ -316,8 +321,8 @@ int main(int argc, char **argv)
       colk = ((k - depthk)/grid_depth) % grid_width;
       rowk = (((k - depthk)/grid_depth) - colk) / grid_width;
 
-      xt[0] = rowk*linear_resolution;
-      xt[1] = colk*linear_resolution;
+      xt[0] = rowk*linear_resolution + map_x;
+      xt[1] = colk*linear_resolution + map_y;
       xt[2] = depthk*angular_resolution;
 
       // ================ Prediction =================
@@ -329,8 +334,8 @@ int main(int argc, char **argv)
         depthi = i % grid_depth;
         coli = ((i - depthi)/grid_depth) % grid_width;
         rowi = (((i - depthk)/grid_depth) - coli) / grid_width;
-        xt_d1[0] = rowi*linear_resolution;
-        xt_d1[1] = coli*linear_resolution;
+        xt_d1[0] = rowi*linear_resolution + map_x;
+        xt_d1[1] = coli*linear_resolution + map_y;
         xt_d1[2] = depthi*angular_resolution;
 
         p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
