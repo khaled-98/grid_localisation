@@ -359,13 +359,24 @@ int main(int argc, char **argv)
         {
           current_dist[row][col][dep] /= sum_of_dist_values;
           previous_dist[row][col][dep] = current_dist[row][col][dep];
+          p_bar_kt[row][col][dep] = 0.0;
+          if(current_dist[row][col][dep] > max_prob)
+          {
+            max_r = row;
+            max_c = col;
+            max_d = dep;
+            max_prob = current_dist[row][col][dep];
+          }
         }
       }
     }
 
+    ROS_INFO("The robot is most likely at %f, %f, %f", max_r*linear_resolution+map_x, max_c*linear_resolution+map_y, max_d*angular_resolution);
+
     previous_transform = current_transform;
 
     ROS_INFO("One round completed!");
+    ros::spinOnce();
     loop_rate.sleep();
   }
 
