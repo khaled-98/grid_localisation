@@ -185,8 +185,6 @@ float measure_distance(int index_a, int index_b, int map_width, int map_height, 
   return sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
 }
 
-nav_msgs::OccupancyGrid likelihood_field;
-
 std::vector<float>& compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
 {
   // TODO: find a more efficient implementation
@@ -211,9 +209,12 @@ std::vector<float>& compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
 
       float temp = measure_distance(i, j, map_width, map_height, resolution);
       if((dist_map[i] == 0) || (temp < dist_map[i]))
+      {
         dist_map[i] = temp;
+      }
     }
   }
+
   return dist_map;
 }
 
@@ -250,6 +251,8 @@ int main(int argc, char **argv)
 
   long number_of_grid_cells = grid_width*grid_length*grid_depth;
 
+  ROS_INFO("Number of grid cells: %d", number_of_grid_cells);
+
   // Get map origin
   // TODO: account for origin rotation
   double map_x = map_srv.response.map.info.origin.position.x;
@@ -269,6 +272,7 @@ int main(int argc, char **argv)
       {
         previous_dist[r][c][d] = temp_prob;
         current_dist[r][c][d] = temp_prob;
+        p_bar_kt[r][c][d] = 0.0;
       }
     }
   }
@@ -287,9 +291,10 @@ int main(int argc, char **argv)
   double laser_pose[3] = {laser_transform.getOrigin().getX(), laser_transform.getOrigin().getY(), tf::getYaw(laser_transform.getRotation())};
 
   ros::Rate loop_rate(10); // 10 Hz
+  double max_prob = 0;
   while(ros::ok())
   {
-    double sum_of_dist_values = 0.0;
+    long double sum_of_dist_values = 0.0;
     // Take a laser scan and get the transform at this scan.
     ros::spinOnce();
     ros::Time current_laser_scan_time = latest_laser_scan_time;
@@ -311,6 +316,7 @@ int main(int argc, char **argv)
       continue;
 
     ROS_INFO("Round Started!");
+
     for(long k = 0; k < number_of_grid_cells; k++) // line 2 of table 8.1
     {
       int rowk, colk, depthk;
@@ -340,15 +346,16 @@ int main(int argc, char **argv)
 
         p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
       }
+
       // =============================================
       // Calculate the unnormalised p_kt
-      float temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, dist_map, map_srv.response.map.info.height);
+      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, dist_map, map_srv.response.map.info.height);
       current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
       sum_of_dist_values += current_dist[rowk][colk][depthk];
     }
 
     int max_r=0, max_c=0, max_d=0;
-    double max_prob = 0;
+    max_prob = 0;
 
     // normalise p_kt and publish the transform
     for(int row = 0; row < grid_length; row++)
