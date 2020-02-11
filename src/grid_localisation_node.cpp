@@ -241,8 +241,8 @@ int main(int argc, char **argv)
   double map_width = map_srv.response.map.info.resolution*map_srv.response.map.info.width;
   double map_height = map_srv.response.map.info.resolution*map_srv.response.map.info.height;
 
-  double linear_resolution = 0.15; // 15 cm
-  double angular_resolution = 0.0873; // 5 degress in radians
+  double linear_resolution = 0.50; // 50 cm
+  double angular_resolution = 0.63; // 36 degress in radians
 
   int grid_width = std::floor(map_width/linear_resolution);
   int grid_length = std::floor(map_height/linear_resolution);
