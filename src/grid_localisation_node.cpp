@@ -121,7 +121,9 @@ int map2ind (int x, int y, int map_height)
   return x*map_height + y;
 }
 
-double measurement_model(float min_angle, float angle_increment, float min_range, float max_range, std::vector<float> ranges, double* xt, double* sensor_pose, std::vector<float>& dist_map, int map_height)
+std::vector<float> dist_map(1000000, 0.0);
+
+double measurement_model(float min_angle, float angle_increment, float min_range, float max_range, std::vector<float> ranges, double* xt, double* sensor_pose, int map_height)
 {
 
   double q = 1.0;
@@ -185,7 +187,7 @@ float measure_distance(int index_a, int index_b, int map_width, int map_height, 
   return sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
 }
 
-std::vector<float>& compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
+void compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
 {
   // TODO: find a more efficient implementation
   // TODO: calculate the probabilities in this function
@@ -193,7 +195,6 @@ std::vector<float>& compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
   int map_height = map.info.height;
   float resolution = map.info.resolution;
 
-  static std::vector<float> dist_map(1000000, 0.0);
   for (int i = 0; i < map_width*map_height; i++)
   {
     if(map.data[i] == 100) // if there's an obstacle in this cells
@@ -214,8 +215,6 @@ std::vector<float>& compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
       }
     }
   }
-
-  return dist_map;
 }
 
 int main(int argc, char **argv)
@@ -234,7 +233,7 @@ int main(int argc, char **argv)
     ROS_INFO("Failed to call map service");
 
   ROS_INFO("Calculating likelihood field...");
-  std::vector<float>& dist_map = compute_likelihood_field(map_srv.response.map);
+  compute_likelihood_field(map_srv.response.map);
   // TODO: provide the option to publish likelihood_field
   ROS_INFO("Completed likelihood field calculation");
 
@@ -242,7 +241,7 @@ int main(int argc, char **argv)
   double map_width = map_srv.response.map.info.resolution*map_srv.response.map.info.width;
   double map_height = map_srv.response.map.info.resolution*map_srv.response.map.info.height;
 
-  double linear_resolution = 0.50; // 50 cm
+  double linear_resolution = 0.30; // 50 cm
   double angular_resolution = 0.63; // 36 degress in radians
 
   int grid_width = std::floor(map_width/linear_resolution);
@@ -349,7 +348,7 @@ int main(int argc, char **argv)
 
       // =============================================
       // Calculate the unnormalised p_kt
-      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, dist_map, map_srv.response.map.info.height);
+      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, map_srv.response.map.info.height);
       current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
       sum_of_dist_values += current_dist[rowk][colk][depthk];
     }
