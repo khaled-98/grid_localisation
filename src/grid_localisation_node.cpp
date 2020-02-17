@@ -9,6 +9,7 @@
 #include "tf/transform_datatypes.h"
 #include <tf/transform_listener.h>
 #include "sensor_msgs/LaserScan.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
 
 void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
@@ -222,6 +223,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "grid_localisation");
   ros::NodeHandle n;
 
+  ros::Publisher pose_pub = n.advertise<geometry_msgs::PoseWithCovariance>("grid_pose", 1);
   ros::Subscriber laser_sub = n.subscribe("base_scan", 100, laser_callback);
   ros::ServiceClient map_srv_client = n.serviceClient<nav_msgs::GetMap>("static_map");
   nav_msgs::GetMap map_srv;
@@ -377,7 +379,20 @@ int main(int argc, char **argv)
       }
     }
 
-    ROS_INFO("The robot is most likely at %f, %f, %f", max_r*linear_resolution+map_x, max_c*linear_resolution+map_y, max_d*angular_resolution);
+
+    geometry_msgs::PoseWithCovarianceStamped current_pose;
+    current_pose.header.stamp = ros::Time::now();
+    current_pose.header.frame_id = "map";
+    current_pose.pose.pose.position.x = max_r*linear_resolution+map_x;
+    current_pose.pose.pose.position.y = max_c*linear_resolution+map_y;
+
+    // TODO: use actual rotation
+    current_pose.pose.pose.orientation.x = 0;
+    current_pose.pose.pose.orientation.y = 0;
+    current_pose.pose.pose.orientation.z = 0;
+    current_pose.pose.pose.orientation.w = 1;
+
+    pose_pub.publish(current_pose);
 
     previous_transform = current_transform;
 
