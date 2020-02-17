@@ -128,15 +128,15 @@ double measurement_model(float min_angle, float angle_increment, float min_range
 {
 
   double q = 1.0;
-  float z_hit = 0.95, z_random = 0.05, z_max = 0.05, sigma_hit = 0.2;
+  float z_hit = 0.5, z_random = 0.5, z_max = 0.05, sigma_hit = 0.2;
   float z_rand_max = z_random/z_max;
   for(int i = 0; i < 30; i++) // check 30 laser rays
   {
-    if((ranges[i*12] == max_range) || (ranges[i*12] == min_range))
+    if((ranges[i*5] >= max_range) || (ranges[i*5] <= min_range))
       continue;
 
-    float x_zkt = floor(xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i*5]*cos(xt[2] + (min_angle+angle_increment*i*12))); // assume that the sensor is not mounted at angle
-    float y_zkt = floor(xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i*5]*sin(xt[2] + (min_angle+angle_increment*i*12))); // assume that the sensor is not mounted at angle
+    float x_zkt = floor(xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i*5]*cos(xt[2] + (min_angle+angle_increment*i*5))); // assume that the sensor is not mounted at angle
+    float y_zkt = floor(xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i*5]*sin(xt[2] + (min_angle+angle_increment*i*5))); // assume that the sensor is not mounted at angle
 
     int index = map2ind(int(x_zkt), int(y_zkt), map_height);
     float dist = dist_map[index];
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "grid_localisation");
   ros::NodeHandle n;
 
-  ros::Publisher pose_pub = n.advertise<geometry_msgs::PoseWithCovariance>("grid_pose", 1);
+  ros::Publisher pose_pub = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("grid_pose", 1);
   ros::Subscriber laser_sub = n.subscribe("base_scan", 100, laser_callback);
   ros::ServiceClient map_srv_client = n.serviceClient<nav_msgs::GetMap>("static_map");
   nav_msgs::GetMap map_srv;
@@ -272,7 +272,6 @@ int main(int argc, char **argv)
       for (int d = 0; d < grid_depth; d++)
       {
         previous_dist[r][c][d] = temp_prob;
-        current_dist[r][c][d] = temp_prob;
         p_bar_kt[r][c][d] = 0.0;
       }
     }
@@ -324,9 +323,6 @@ int main(int argc, char **argv)
       double xt[3];
 
       ind2sub(k, grid_length, grid_width, grid_depth, &rowk, &colk, &depthk);
-      depthk = k % grid_depth;
-      colk = ((k - depthk)/grid_depth) % grid_width;
-      rowk = (((k - depthk)/grid_depth) - colk) / grid_width;
 
       xt[0] = rowk*linear_resolution + map_x;
       xt[1] = colk*linear_resolution + map_y;
@@ -338,9 +334,7 @@ int main(int argc, char **argv)
         int rowi, coli, depthi;
         double xt_d1[3];
 
-        depthi = i % grid_depth;
-        coli = ((i - depthi)/grid_depth) % grid_width;
-        rowi = (((i - depthk)/grid_depth) - coli) / grid_width;
+        ind2sub(i, grid_length, grid_width, grid_depth, &rowi, &coli, &depthi);
         xt_d1[0] = rowi*linear_resolution + map_x;
         xt_d1[1] = coli*linear_resolution + map_y;
         xt_d1[2] = depthi*angular_resolution;
@@ -350,7 +344,7 @@ int main(int argc, char **argv)
 
       // =============================================
       // Calculate the unnormalised p_kt
-      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, map_srv.response.map.info.height);
+      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, grid_width);
       current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
       sum_of_dist_values += current_dist[rowk][colk][depthk];
     }
