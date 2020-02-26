@@ -281,11 +281,11 @@ int main(int argc, char **argv)
   tf::StampedTransform previous_transform;
   tf::StampedTransform laser_transform;
 
-  tf_listener.waitForTransform("/base_footprint", "/odom", ros::Time(0), ros::Duration(10.0));
-  tf_listener.lookupTransform("/base_footprint", "/odom", ros::Time(0), previous_transform); // get initial transform
+  tf_listener.waitForTransform("/odom", "/base_link", ros::Time(0), ros::Duration(10.0));
+  tf_listener.lookupTransform("/odom", "/base_link", ros::Time(0), previous_transform); // get initial transform
 
-  tf_listener.waitForTransform("/base_footprint", "/base_laser_front_link", ros::Time(0), ros::Duration(10.0));
-  tf_listener.lookupTransform("/base_footprint", "/base_laser_front_link", ros::Time(0), laser_transform);
+  tf_listener.waitForTransform("/base_link", "/base_laser_front_link", ros::Time(0), ros::Duration(10.0));
+  tf_listener.lookupTransform("/base_link", "/base_laser_front_link", ros::Time(0), laser_transform);
   double laser_pose[3] = {laser_transform.getOrigin().getX(), laser_transform.getOrigin().getY(), tf::getYaw(laser_transform.getRotation())};
 
   ros::Rate loop_rate(10); // 10 Hz
@@ -298,8 +298,8 @@ int main(int argc, char **argv)
     ros::Time current_laser_scan_time = latest_laser_scan_time;
     std::vector<float> current_laser_ranges = latest_laser_ranges;
     try{
-      tf_listener.waitForTransform("/base_footprint", "/odom", current_laser_scan_time, ros::Duration(3.0));
-      tf_listener.lookupTransform("/base_footprint", "/odom", current_laser_scan_time, current_transform);
+      tf_listener.waitForTransform("/odom", "/base_link", current_laser_scan_time, ros::Duration(3.0));
+      tf_listener.lookupTransform("/odom", "/base_link", current_laser_scan_time, current_transform);
     }
     catch (tf::TransformException &ex) {
       ROS_ERROR("%s",ex.what());
