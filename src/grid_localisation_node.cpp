@@ -98,17 +98,15 @@ double motion_model(double* xt, double* ut, double* xt_d1)
 
   double a, b;
   a = angle_diff(delta_rot1, delta_rot1_hat);
-
-  b = alpha1*(delta_rot1_hat*delta_rot1_hat)+alpha2*(delta_trans*delta_trans);
+  b = sqrt(alpha1*delta_rot1_hat*delta_rot1_hat + alpha2*delta_trans_hat*delta_trans_hat);
   double p1 = prob(a, b);
 
   a = delta_trans-delta_trans_hat;
-  b = alpha3*(delta_trans_hat*delta_trans_hat)+alpha4*(delta_rot1_hat*delta_rot1_hat)+alpha4*(delta_rot2_hat*delta_rot2_hat);
+  b = sqrt(alpha3*delta_trans_hat*delta_trans_hat + alpha4*delta_rot1_hat*delta_rot1_hat + alpha4*delta_rot2_hat*delta_rot2_hat);
   double p2 = prob(a, b);
 
   a = angle_diff(delta_rot2, delta_rot2_hat);
-
-  b = alpha1*(delta_rot2_hat*delta_rot2_hat)+alpha2*(delta_trans_hat*delta_trans_hat);
+  b = sqrt(alpha1*delta_rot2_hat*delta_rot2_hat + alpha2*delta_trans_hat*delta_trans_hat);
   double p3 = prob(a, b);
 
   if(isnan(p1*p2*p3))
