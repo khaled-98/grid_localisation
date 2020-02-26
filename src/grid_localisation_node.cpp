@@ -36,14 +36,14 @@ bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
   double theta_prime = tf::getYaw(curr.getRotation());
 
   // Check if the distance travelled is bigger than the tolerance
-  if(sqrt((pow(x-x_prime, 2))+pow(y-y_prime, 2)) < linear_tol)
-    return true;
+  if(sqrt((pow(x-x_prime, 2))+pow(y-y_prime, 2)) > linear_tol)
+    return false;
 
   // Check if the angle travelled is bigger than the tolerance
-  if(fabs(theta - theta_prime) < angular_tol)
-    return true;
+  if(fabs(theta - theta_prime) > angular_tol)
+    return false;
 
-  return false;
+  return true;
 }
 
 double angle_diff(double a, double b)
