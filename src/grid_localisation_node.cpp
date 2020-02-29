@@ -216,6 +216,16 @@ void compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
   }
 }
 
+geometry_msgs::PoseWithCovarianceStamped init_pose;
+bool init_pose_recieved = false;
+void init_pose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
+{
+  init_pose.header = msg->header;
+  init_pose.pose = msg->pose;
+  init_pose_recieved = true;
+  ROS_INFO("New pose receieved");
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "grid_localisation");
@@ -223,6 +233,7 @@ int main(int argc, char **argv)
 
   ros::Publisher pose_pub = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("grid_pose", 1);
   ros::Subscriber laser_sub = n.subscribe("base_scan", 100, laser_callback);
+  ros::Subscriber init_pose_sub = n.subscribe("initialpose", 10, init_pose_callback);
   ros::ServiceClient map_srv_client = n.serviceClient<nav_msgs::GetMap>("static_map");
   nav_msgs::GetMap map_srv;
 
@@ -292,6 +303,22 @@ int main(int argc, char **argv)
   double max_prob = 0;
   while(ros::ok())
   {
+    if(init_pose_recieved)
+    {
+      int r = floor(float(init_pose.pose.pose.position.x - map_x)/linear_resolution);
+      int c = floor(float(init_pose.pose.pose.position.y - map_y)/linear_resolution);
+      // The orientation is given in the range [-pi, pi], so it is shifted to [0, 2pi]
+      // for ease of conversion into grid coordinates
+      float temp_d = tf::getYaw(init_pose.pose.pose.orientation);
+      if(temp_d < 0)
+        temp_d += 2*M_PI;
+      temp_d /= angular_resolution;
+      int d = floor(temp_d);
+      previous_dist[r][c][d] = 0.5;
+      //TODO: set all the others to zero!
+      init_pose_recieved = false;
+    }
+
     long double sum_of_dist_values = 0.0;
     // Take a laser scan and get the transform at this scan.
     ros::spinOnce();
