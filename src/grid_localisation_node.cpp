@@ -13,7 +13,7 @@
 
 void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
-  // Don't event ask
+  // Don't even ask
   // https://eli.thegreenplace.net/2015/memory-layout-of-multi-dimensional-arrays/
   int n1, n2, n3;
   n3 = index % N3;
@@ -66,7 +66,7 @@ double angle_diff(double a, double b)
 
 double prob(double a, double b)
 {
-  return (1/sqrt(2*M_PI*b*b))*exp(-0.5*((a*a)/(b*b)));
+  return (1.0/(sqrt(2*M_PI)*b))*exp(-0.5*((a*a)/(b*b)));
 }
 
 double motion_model(double* xt, double* ut, double* xt_d1)
