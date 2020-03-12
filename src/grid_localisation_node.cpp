@@ -69,9 +69,10 @@ double prob(double a, double b)
   return (1.0/(sqrt(2*M_PI)*b))*exp(-0.5*((a*a)/(b*b)));
 }
 
+float a1 = 0.1, a2 = 0.1, a3 = 0.1, a4 = 0.1;
 double motion_model(double* xt, double* ut, double* xt_d1)
 {
-  float alpha1 = 0.2, alpha2 = 0.2, alpha3=0.8, alpha4=0.2, alpha5=0.1;
+  float alpha1 = a1, alpha2 = a2, alpha3=a3, alpha4=a4;
   double x_prime = xt[0];
   double y_prime = xt[1];
   double theta_prime = xt[2];
@@ -235,6 +236,12 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "grid_localisation");
   ros::NodeHandle n;
+  ros::NodeHandle private_n("~");
+  private_n.getParam("a1", a1);
+  private_n.getParam("a2", a2);
+  private_n.getParam("a3", a3);
+  private_n.getParam("a4", a4);
+  ROS_INFO("Alpha values: %f, %f, %f, %f", a1, a2, a3, a4);
 
   ros::Publisher pose_pub = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("grid_pose", 1);
   ros::Subscriber laser_sub = n.subscribe("base_scan", 100, laser_callback);
