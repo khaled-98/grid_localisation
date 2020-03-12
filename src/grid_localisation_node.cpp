@@ -297,6 +297,9 @@ int main(int argc, char **argv)
   int grid_length = std::floor(map_height/linear_resolution);
   int grid_depth = std::floor((2*M_PI)/angular_resolution);
 
+  ROS_INFO("Grid width: %d", grid_width);
+  ROS_INFO("Grid length: %d", grid_length);
+  ROS_INFO("Grid depth: %d", grid_depth);
   long number_of_grid_cells = grid_width*grid_length*grid_depth;
 
   ROS_INFO("Number of grid cells: %d", number_of_grid_cells);
@@ -343,7 +346,7 @@ int main(int argc, char **argv)
   {
     if(init_pose_recieved)
     {
-      int r = floor(float(init_pose.pose.pose.position.x - map_x)/linear_resolution);
+      ROS_INFO("Initial pose: %f, %f", init_pose.pose.pose.position.x, init_pose.pose.pose.position.y);
       int c = floor(float(init_pose.pose.pose.position.y - map_y)/linear_resolution);
       // The orientation is given in the range [-pi, pi], so it is shifted to [0, 2pi]
       // for ease of conversion into grid coordinates
@@ -352,6 +355,7 @@ int main(int argc, char **argv)
         temp_d += 2*M_PI;
       temp_d /= angular_resolution;
       int d = floor(temp_d);
+      ROS_INFO("Initial grid location: %d, %d, %d", c, r, d);
       previous_dist[r][c][d] = 0.5;
       //TODO: set all the others to zero!
       init_pose_recieved = false;
