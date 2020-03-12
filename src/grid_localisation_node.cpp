@@ -342,13 +342,14 @@ int main(int argc, char **argv)
 
   ros::Rate loop_rate(0.5); // 10 Hz
   double max_prob = 0.0;
-  
+
   while(ros::ok())
   {
     if(init_pose_recieved)
     {
       ROS_INFO("Initial pose: %f, %f", init_pose.pose.pose.position.x, init_pose.pose.pose.position.y);
-      int c = floor(float(init_pose.pose.pose.position.y - map_y)/linear_resolution);
+      int c = floor(float(init_pose.pose.pose.position.x - map_x)/linear_resolution);
+      int r = floor(float(init_pose.pose.pose.position.y - map_y)/linear_resolution);
       // The orientation is given in the range [-pi, pi], so it is shifted to [0, 2pi]
       // for ease of conversion into grid coordinates
       float temp_d = tf::getYaw(init_pose.pose.pose.orientation);
@@ -392,9 +393,11 @@ int main(int argc, char **argv)
 
       ind2sub(k, grid_length, grid_width, grid_depth, &rowk, &colk, &depthk);
 
-      xt[0] = rowk*linear_resolution + map_x;
-      xt[1] = colk*linear_resolution + map_y;
+      xt[0] = colk*linear_resolution + map_x;
+      xt[1] = rowk*linear_resolution + map_y;
       xt[2] = depthk*angular_resolution;
+      if(xt[2] > M_PI)
+        xt[2] -= 2*M_PI;
 
       // ================ Prediction =================
       for(long i = 0; i < number_of_grid_cells; i++)
@@ -406,9 +409,11 @@ int main(int argc, char **argv)
         double xt_d1[3];
 
         ind2sub(i, grid_length, grid_width, grid_depth, &rowi, &coli, &depthi);
-        xt_d1[0] = rowi*linear_resolution + map_x;
-        xt_d1[1] = coli*linear_resolution + map_y;
+        xt_d1[0] = coli*linear_resolution + map_x;
+        xt_d1[1] = rowi*linear_resolution + map_y;
         xt_d1[2] = depthi*angular_resolution;
+        if(xt_d1[2] > M_PI)
+          xt_d1[2] -= 2*M_PI;
 
         p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
       }
@@ -448,8 +453,8 @@ int main(int argc, char **argv)
     geometry_msgs::PoseWithCovarianceStamped current_pose;
     current_pose.header.stamp = ros::Time::now();
     current_pose.header.frame_id = "map";
-    current_pose.pose.pose.position.x = max_r*linear_resolution+map_x;
-    current_pose.pose.pose.position.y = max_c*linear_resolution+map_y;
+    current_pose.pose.pose.position.x = max_c*linear_resolution+map_x;
+    current_pose.pose.pose.position.y = max_r*linear_resolution+map_y;
 
     // TODO: use actual rotation
     current_pose.pose.pose.orientation.x = 0;
