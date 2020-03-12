@@ -313,8 +313,8 @@ int main(int argc, char **argv)
   ROS_INFO("Initialising distribution...");
   double previous_dist[50][50][73];
   double current_dist[50][50][73];
-  double temp_prob = 1.0/number_of_grid_cells;
-  double p_bar_kt[50][50][73] = {};
+  double temp_prob = 0.5/(number_of_grid_cells-1); // equal distribuition at all the places where the robot isn't at
+  double p_bar_kt[50][50][73];
   for (int r = 0; r < grid_length; r++)
   {
     for (int c = 0; c < grid_width; c++)
@@ -340,8 +340,9 @@ int main(int argc, char **argv)
   tf_listener.lookupTransform("/base_link", "/base_laser_front_link", ros::Time(0), laser_transform);
   double laser_pose[3] = {laser_transform.getOrigin().getX(), laser_transform.getOrigin().getY(), tf::getYaw(laser_transform.getRotation())};
 
-  ros::Rate loop_rate(10); // 10 Hz
-  double max_prob = 0;
+  ros::Rate loop_rate(0.5); // 10 Hz
+  double max_prob = 0.0;
+  
   while(ros::ok())
   {
     if(init_pose_recieved)
@@ -398,6 +399,9 @@ int main(int argc, char **argv)
       // ================ Prediction =================
       for(long i = 0; i < number_of_grid_cells; i++)
       {
+        if(i==k)
+          continue;
+
         int rowi, coli, depthi;
         double xt_d1[3];
 
@@ -417,7 +421,7 @@ int main(int argc, char **argv)
     }
 
     int max_r=0, max_c=0, max_d=0;
-    max_prob = 0;
+    max_prob = 0.0;
 
     // normalise p_kt and publish the transform
     for(int row = 0; row < grid_length; row++)
@@ -459,7 +463,6 @@ int main(int argc, char **argv)
 
     ROS_INFO("One round completed!");
     ros::spinOnce();
-    loop_rate.sleep();
   }
 
   ros::spin(); // do I need this?
