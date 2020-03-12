@@ -128,21 +128,47 @@ int map2ind (int x, int y, int map_height)
 
 std::vector<float> dist_map(1000000, 0.0);
 
-double measurement_model(float min_angle, float angle_increment, float min_range, float max_range, std::vector<float> ranges, double* xt, double* sensor_pose, int map_height)
+double measurement_model(float min_angle, float angle_increment, float min_range, float max_range, std::vector<float> ranges, double* xt, double* sensor_pose, int map_width, int map_height, double map_origin_x, double map_origin_y, float map_resolution)
 {
 
   double q = 1.0;
-  float z_hit = 0.5, z_random = 0.5, z_max = 0.05, sigma_hit = 0.2;
+  float z_hit = 0.95, z_random = 0.05, z_max = max_range, sigma_hit = 0.2;
   float z_rand_max = z_random/z_max;
+  double min_x = map_origin_x;
+  double max_x = map_origin_x + map_width*map_resolution;
+  double min_y = map_origin_y;
+  double max_y = map_origin_y + map_height*map_resolution;
+  std::cout << min_x << " " << max_x << " " << min_y << " " << max_y << std::endl;
+
   for(int i = 0; i < 30; i++) // check 30 laser rays
   {
+    // If the reading is above the maximum or below the minimum range of the LiDAR, discard it
     if((ranges[i*5] >= max_range) || (ranges[i*5] <= min_range))
       continue;
 
-    float x_zkt = floor(xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i*5]*cos(xt[2] + (min_angle+angle_increment*i*5))); // assume that the sensor is not mounted at angle
-    float y_zkt = floor(xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i*5]*sin(xt[2] + (min_angle+angle_increment*i*5))); // assume that the sensor is not mounted at angle
+    // Calculate the angle of the beam and bound it to [-pi, pi]
+    float beam_angle = min_angle+angle_increment*i*5;
+    if(beam_angle < 0)
+      beam_angle += 2*M_PI;
+      
+    // Project the beam end-point onto the map
+    float x_zkt = xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i*5]*cos(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
+    float y_zkt = xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i*5]*sin(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
 
-    int index = map2ind(int(x_zkt), int(y_zkt), map_height);
+    // temproary fix - discard readings that are out of bound
+    if(x_zkt < min_x || x_zkt > max_x || y_zkt < min_y || y_zkt > max_y) // THESE VALUES NEED TO BE CHANGED!
+      continue;
+
+    
+    // Project the points onto the likelihood field by subreacting the origin and dividing by the map resoluiton
+    x_zkt -= map_origin_x;
+    y_zkt -= map_origin_y;
+
+    x_zkt /= map_resolution;
+    y_zkt /= map_resolution;
+    
+    // Get the relevant point from the likelhood field
+    int index = map2ind(int(y_zkt), int(x_zkt), map_height);
     float dist = dist_map[index];
 
     q *= (z_hit*prob(dist, sigma_hit) + z_rand_max);
@@ -381,7 +407,7 @@ int main(int argc, char **argv)
 
       // =============================================
       // Calculate the unnormalised p_kt
-      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, grid_width);
+      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, map_srv.response.map.info.width, map_srv.response.map.info.height, map_x, map_y, map_srv.response.map.info.resolution);
       current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
       sum_of_dist_values += current_dist[rowk][colk][depthk];
     }
