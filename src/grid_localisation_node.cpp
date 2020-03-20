@@ -26,7 +26,7 @@ void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
 
 bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
 {
-  double linear_tol=0.1, angular_tol=0.052; // 3 degrees in radians
+  double linear_tol=0.1; // 3 degrees in radians
   double x = prev.getOrigin().getX();
   double y = prev.getOrigin().getY();
   double theta = tf::getYaw(prev.getRotation());
@@ -286,8 +286,8 @@ int main(int argc, char **argv)
   double map_width = map_srv.response.map.info.resolution*map_srv.response.map.info.width;
   double map_height = map_srv.response.map.info.resolution*map_srv.response.map.info.height;
 
-  double linear_resolution = 0.30; // 50 cm
-  double angular_resolution = 0.63; // 36 degress in radians
+  double linear_resolution = 0.15; // 50 cm
+  double angular_resolution = 0.785; // 36 degress in radians
 
   int grid_width = std::floor(map_width/linear_resolution);
   int grid_length = std::floor(map_height/linear_resolution);
