@@ -39,10 +39,6 @@ bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
   if(sqrt((pow(x-x_prime, 2))+pow(y-y_prime, 2)) > linear_tol)
     return false;
 
-  // Check if the angle travelled is bigger than the tolerance
-  if(fabs(theta - theta_prime) > angular_tol)
-    return false;
-
   return true;
 }
 
