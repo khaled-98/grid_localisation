@@ -93,26 +93,27 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   double delta_trans_hat = sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
   double delta_rot2_hat = theta_prime - theta - delta_rot1_hat;
 
-  double a, b;
+  double a, b, p1, p2, p3;
   a = angle_diff(delta_rot1, delta_rot1_hat);
   b = sqrt(alpha1*delta_rot1_hat*delta_rot1_hat + alpha2*delta_trans_hat*delta_trans_hat);
-  double p1 = prob(a, b);
-  if(isnan(p1))
+  if(b == 0)
     p1 = 1.0;
+  else
+    p1 = prob(a, b);
 
   a = delta_trans-delta_trans_hat;
   b = sqrt(alpha3*delta_trans_hat*delta_trans_hat + alpha4*delta_rot1_hat*delta_rot1_hat + alpha4*delta_rot2_hat*delta_rot2_hat);
-  double p2 = prob(a, b);
-  if(isnan(p2))
+  if(b == 0)
     p2 = 1.0;
-
+  else
+    p2 = prob(a, b);
+  
   a = angle_diff(delta_rot2, delta_rot2_hat);
   b = sqrt(alpha1*delta_rot2_hat*delta_rot2_hat + alpha2*delta_trans_hat*delta_trans_hat);
-  double p3 = prob(a, b);
-  if(isnan(p3))
+  if(b == 0)
     p3 = 1.0;
-
-  // TODO: identify a better solution for the NaN cases
+  else
+    p3 = prob(a, b);
 
   return p1*p2*p3;
 }
@@ -134,7 +135,6 @@ double measurement_model(float min_angle, float angle_increment, float min_range
   double max_x = map_origin_x + map_width*map_resolution;
   double min_y = map_origin_y;
   double max_y = map_origin_y + map_height*map_resolution;
-  std::cout << min_x << " " << max_x << " " << min_y << " " << max_y << std::endl;
 
   for(int i = 0; i < 30; i++) // check 30 laser rays
   {
