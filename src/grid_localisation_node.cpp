@@ -24,6 +24,12 @@ void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
   *k = n3;
 }
 
+long sub2ind(int n1, int n2, int n3, int N2, int N3)
+{
+  // https://eli.thegreenplace.net/2015/memory-layout-of-multi-dimensional-arrays/
+  return n3 + N3*(n2+N2*n1);
+}
+
 bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
 {
   double linear_tol=0.1; // 3 degrees in radians
@@ -339,6 +345,9 @@ int main(int argc, char **argv)
   ros::Rate loop_rate(0.5); // 10 Hz
   double max_prob = 0.0;
 
+  geometry_msgs::PoseWithCovarianceStamped current_pose;
+  double rolling_window_size = (2.0/linear_resolution)*(2.0/linear_resolution)*grid_depth;
+
   while(ros::ok())
   {
     if(init_pose_recieved)
@@ -357,6 +366,9 @@ int main(int argc, char **argv)
       previous_dist[r][c][d] = 0.5;
       //TODO: set all the others to zero!
       init_pose_recieved = false;
+
+      current_pose.pose.pose.position.x = init_pose.pose.pose.position.x;
+      current_pose.pose.pose.position.y = init_pose.pose.pose.position.y;
     }
 
     long double sum_of_dist_values = 0.0;
@@ -382,7 +394,29 @@ int main(int argc, char **argv)
 
     ROS_INFO("Round Started!");
 
-    for(long k = 0; k < number_of_grid_cells; k++) // line 2 of table 8.1
+    // rolling window calculations
+    // 1) Where to start the window from
+    double window_start_x = current_pose.pose.pose.position.x - 1;
+    double window_start_y = current_pose.pose.pose.position.y - 1;
+    // 2) Adjust if out of bound
+    if(window_start_x < map_srv.response.map.info.origin.position.x)
+      window_start_x = map_srv.response.map.info.origin.position.x;
+
+    if(window_start_y < map_srv.response.map.info.origin.position.y)
+      window_start_y = map_srv.response.map.info.origin.position.y;
+
+    window_start_x -= map_srv.response.map.info.origin.position.x;
+    window_start_x /= linear_resolution;
+
+    window_start_y -= map_srv.response.map.info.origin.position.y;
+    window_start_y /= linear_resolution;
+
+    long window_start_index = sub2ind(int(window_start_y), int(window_start_x), 0, grid_width, grid_depth);
+    long window_end_index = window_start_index + rolling_window_size;
+    if(window_end_index > number_of_grid_cells)
+      window_end_index = number_of_grid_cells;
+
+    for(long k = window_start_index; k < window_end_index; k++) // line 2 of table 8.1
     {
       int rowk, colk, depthk;
       double xt[3];
@@ -396,7 +430,7 @@ int main(int argc, char **argv)
         xt[2] -= 2*M_PI;
 
       // ================ Prediction =================
-      for(long i = 0; i < number_of_grid_cells; i++)
+      for(long i = window_start_index; i < window_end_index; i++)
       {
         if(i==k)
           continue;
@@ -446,7 +480,6 @@ int main(int argc, char **argv)
     }
 
 
-    geometry_msgs::PoseWithCovarianceStamped current_pose;
     current_pose.header.stamp = ros::Time::now();
     current_pose.header.frame_id = "map";
     current_pose.pose.pose.position.x = max_c*linear_resolution+map_x;
