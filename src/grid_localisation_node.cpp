@@ -313,8 +313,9 @@ int main(int argc, char **argv)
 
   // Initialise distribution uniformly
   ROS_INFO("Initialising distribution...");
-  double previous_dist[50][50][73];
-  double current_dist[50][50][73];
+  double previous_dist[150][150][8];
+  double current_dist[150][150][8];
+  double p_bar_kt[150][150][8];
   double temp_prob = 0.5/(number_of_grid_cells-1); // equal distribuition at all the places where the robot isn't at
   for (int r = 0; r < grid_height; r++)
   {
