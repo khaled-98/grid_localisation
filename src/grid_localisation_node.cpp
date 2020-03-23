@@ -412,7 +412,20 @@ int main(int argc, char **argv)
     window_start_y /= linear_resolution;
 
     long window_start_index = sub2ind(int(window_start_y), int(window_start_x), 0, grid_width, grid_depth);
-    long window_end_index = window_start_index + rolling_window_size;
+
+    // 3) Where to end the window
+    double window_end_x = current_pose.pose.pose.position.x + 1;
+    double window_end_y = current_pose.pose.pose.position.y + 1;
+
+    window_end_x -= map_srv.response.map.info.origin.position.x;
+    window_end_x /= linear_resolution;
+
+    window_end_y -= map_srv.response.map.info.origin.position.y;
+    window_end_y /= linear_resolution;
+
+    long window_end_index = sub2ind(int(window_end_y), int(window_end_x), 0, grid_width, grid_depth);
+
+    // 4) Adjust if out of bound
     if(window_end_index > number_of_grid_cells)
       window_end_index = number_of_grid_cells;
 
