@@ -30,22 +30,32 @@ long sub2ind(int n1, int n2, int n3, int N2, int N3)
   return n3 + N3*(n2+N2*n1);
 }
 
-bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
+bool isTranslation(tf::StampedTransform prev, tf::StampedTransform curr)
 {
-  double linear_tol=0.1; // 3 degrees in radians
+  double linear_tol=0.1;
   double x = prev.getOrigin().getX();
   double y = prev.getOrigin().getY();
-  double theta = tf::getYaw(prev.getRotation());
 
   double x_prime = curr.getOrigin().getX();
   double y_prime = curr.getOrigin().getY();
-  double theta_prime = tf::getYaw(curr.getRotation());
 
   // Check if the distance travelled is bigger than the tolerance
   if(sqrt((pow(x-x_prime, 2))+pow(y-y_prime, 2)) > linear_tol)
-    return false;
+    return true;
 
-  return true;
+  return false;
+}
+
+bool isRotation(tf::StampedTransform prev, tf::StampedTransform curr)
+{
+  double angular_tol=0.1745; // 10 degrees in radians
+  double theta = tf::getYaw(prev.getRotation());
+  double theta_prime = tf::getYaw(curr.getRotation());
+
+  if(fabs(theta - theta_prime) > angular_tol)
+    return true;
+
+  return false;
 }
 
 double angle_diff(double a, double b)
@@ -348,6 +358,8 @@ int main(int argc, char **argv)
   geometry_msgs::PoseWithCovarianceStamped current_pose;
   int rolling_window_size = floor(2.0/linear_resolution);
 
+  bool initial_run = true;
+
   while(ros::ok())
   {
     if(init_pose_recieved)
@@ -389,45 +401,58 @@ int main(int argc, char **argv)
     double ut[6] = {previous_transform.getOrigin().getX(), previous_transform.getOrigin().getY(), tf::getYaw(previous_transform.getRotation()),
                     current_transform.getOrigin().getX(), current_transform.getOrigin().getY(), tf::getYaw(current_transform.getRotation())};
 
-    if(isNoMovement(previous_transform, current_transform)) // Don't do anything if the robot didn't move
+    bool translation = isTranslation(previous_transform, current_transform);
+    bool rotation = isRotation(previous_transform, current_transform);
+    
+    if(!translation && initial_run) // The motion model has to run at least once
+      continue;
+
+    if(!translation && !rotation) // If the robot hasn't translated or rotated, don't update the pose
       continue;
 
     ROS_INFO("Round Started!");
 
+
     // rolling window calculations
-    // 1) Where to start the window from
-    double window_start_x = current_pose.pose.pose.position.x - 1;
-    double window_start_y = current_pose.pose.pose.position.y - 1;
-    // 2) Adjust if out of bound
-    if(window_start_x < map_srv.response.map.info.origin.position.x)
-      window_start_x = map_srv.response.map.info.origin.position.x;
+    double window_start_x, window_start_y, window_end_x, window_end_y;
+    long window_start_index, window_end_index;
+    if(translation) // If the robot hasn't translated or this is the inital run, the same window applies
+    {
+      // 1) Where to start the window from
+      window_start_x = current_pose.pose.pose.position.x - 1;
+      window_start_y = current_pose.pose.pose.position.y - 1;
+      // 2) Adjust if out of bound
+      if(window_start_x < map_srv.response.map.info.origin.position.x)
+        window_start_x = map_srv.response.map.info.origin.position.x;
 
-    if(window_start_y < map_srv.response.map.info.origin.position.y)
-      window_start_y = map_srv.response.map.info.origin.position.y;
+      if(window_start_y < map_srv.response.map.info.origin.position.y)
+        window_start_y = map_srv.response.map.info.origin.position.y;
 
-    window_start_x -= map_srv.response.map.info.origin.position.x;
-    window_start_x /= linear_resolution;
+      window_start_x -= map_srv.response.map.info.origin.position.x;
+      window_start_x /= linear_resolution;
 
-    window_start_y -= map_srv.response.map.info.origin.position.y;
-    window_start_y /= linear_resolution;
+      window_start_y -= map_srv.response.map.info.origin.position.y;
+      window_start_y /= linear_resolution;
 
-    long window_start_index = sub2ind(int(window_start_y), int(window_start_x), 0, grid_width, grid_depth);
+      window_start_index = sub2ind(int(window_start_y), int(window_start_x), 0, grid_width, grid_depth);
 
-    // 3) Where to end the window
-    double window_end_x = current_pose.pose.pose.position.x + 1;
-    double window_end_y = current_pose.pose.pose.position.y + 1;
+      // 3) Where to end the window
+      window_end_x = current_pose.pose.pose.position.x + 1;
+      window_end_y = current_pose.pose.pose.position.y + 1;
 
-    window_end_x -= map_srv.response.map.info.origin.position.x;
-    window_end_x /= linear_resolution;
+      window_end_x -= map_srv.response.map.info.origin.position.x;
+      window_end_x /= linear_resolution;
 
-    window_end_y -= map_srv.response.map.info.origin.position.y;
-    window_end_y /= linear_resolution;
+      window_end_y -= map_srv.response.map.info.origin.position.y;
+      window_end_y /= linear_resolution;
 
-    long window_end_index = sub2ind(int(window_end_y), int(window_end_x), 0, grid_width, grid_depth);
+      window_end_index = sub2ind(int(window_end_y), int(window_end_x), 0, grid_width, grid_depth);
 
-    // 4) Adjust if out of bound
-    if(window_end_index > number_of_grid_cells)
-      window_end_index = number_of_grid_cells;
+      // 4) Adjust if out of bound
+      if(window_end_index > number_of_grid_cells)
+        window_end_index = number_of_grid_cells;
+    
+    }
 
     long counterK = 1;
     for(long k = window_start_index; k < window_end_index; k++) // line 2 of table 8.1
@@ -452,37 +477,43 @@ int main(int argc, char **argv)
       if(xt[2] > M_PI)
         xt[2] -= 2*M_PI;
 
-      // ================ Prediction =================
-      long counterI = 1;
-      for(long i = window_start_index; i < window_end_index; i++)
+      if(translation) // Only update the motion model if the robot has translated
       {
-        if(i==k)
-          continue;
-        if(counterI == (rolling_window_size*grid_depth))
+        // ================ Prediction =================
+        long counterI = 1;
+        for(long i = window_start_index; i < window_end_index; i++)
         {
-          i += (grid_width - rolling_window_size)*grid_depth - 1;
-          counterI = 1;
-          continue;
+          if(i==k)
+            continue;
+          if(counterI == (rolling_window_size*grid_depth))
+          {
+            i += (grid_width - rolling_window_size)*grid_depth - 1;
+            counterI = 1;
+            continue;
+          }
+          counterI++;
+
+          int rowi, coli, depthi;
+          double xt_d1[3];
+
+          ind2sub(i, grid_height, grid_width, grid_depth, &rowi, &coli, &depthi);
+          xt_d1[0] = coli*linear_resolution + map_origin_x;
+          xt_d1[1] = rowi*linear_resolution + map_origin_y;
+          xt_d1[2] = depthi*angular_resolution;
+          if(xt_d1[2] > M_PI)
+            xt_d1[2] -= 2*M_PI;
+
+          p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
         }
-        counterI++;
-
-        int rowi, coli, depthi;
-        double xt_d1[3];
-
-        ind2sub(i, grid_height, grid_width, grid_depth, &rowi, &coli, &depthi);
-        xt_d1[0] = coli*linear_resolution + map_origin_x;
-        xt_d1[1] = rowi*linear_resolution + map_origin_y;
-        xt_d1[2] = depthi*angular_resolution;
-        if(xt_d1[2] > M_PI)
-          xt_d1[2] -= 2*M_PI;
-
-        p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
       }
-
       // =============================================
       // Calculate the unnormalised p_kt
       double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, map_srv.response.map.info.width, map_srv.response.map.info.height, map_origin_x, map_origin_y, map_srv.response.map.info.resolution);
-      current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
+      if(translation && rotation) 
+        current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
+      else  // Use the previous distribuition if the robot hasn't translated and only the laser model is being updated
+          current_dist[rowk][colk][depthk] = previous_dist[rowk][colk][depthk]*temp_measure_model;
+      
       sum_of_dist_values += current_dist[rowk][colk][depthk];
     }
 
@@ -535,6 +566,7 @@ int main(int argc, char **argv)
 
     ROS_INFO("One round completed!");
     ros::spinOnce();
+    initial_run = false;
   }
 
   ros::spin(); // do I need this?
