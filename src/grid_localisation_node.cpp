@@ -124,9 +124,9 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   return p1*p2*p3;
 }
 
-int map2ind (int x, int y, int map_height)
+int map2ind (int x, int y, int map_width)
 {
-  return x*map_height + y;
+  return y*map_width + x;
 }
 
 std::vector<float> dist_map(1000000, 0.0);
@@ -170,7 +170,7 @@ double measurement_model(float min_angle, float angle_increment, float min_range
     y_zkt /= map_resolution;
     
     // Get the relevant point from the likelhood field
-    int index = map2ind(int(y_zkt), int(x_zkt), map_height);
+    int index = map2ind(int(x_zkt), int(y_zkt), map_width);
     float dist = dist_map[index];
 
     q *= (z_hit*prob(dist, sigma_hit) + z_rand_max);
@@ -197,23 +197,23 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   laser_range_min = msg->range_min;
 }
 
-int* ind2map (int ind, int map_height)
+int* ind2map (int ind, int map_width)
 {
   static int coord[2];
-  coord[1] = ind % map_height;
-  coord[0] = (ind - coord[1])/map_height;
+  coord[0] = ind % map_width;            // The x's are along the cols
+  coord[1] = (ind - coord[0])/map_width; // The y's are along the rows
   return coord;
 }
 
-float measure_distance(int index_a, int index_b, int map_width, int map_height, float resolution)
+float measure_distance(int index_a, int index_b, int map_width, float resolution)
 {
   float x, y, x_prime, y_prime;
   int* coord;
-  coord = ind2map(index_a, map_height);
+  coord = ind2map(index_a, map_width);
   x = coord[0]*resolution;
   y = coord[1]*resolution;
 
-  coord = ind2map(index_b, map_height);
+  coord = ind2map(index_b, map_width);
   x_prime = coord[0]*resolution;
   y_prime = coord[1]*resolution;
 
@@ -241,7 +241,7 @@ void compute_likelihood_field(const nav_msgs::OccupancyGrid& map)
       if(map.data[j] != 100) // if this is not an obstacle
         continue;
 
-      float temp = measure_distance(i, j, map_width, map_height, resolution);
+      float temp = measure_distance(i, j, map_width, resolution);
       if((dist_map[i] == 0) || (temp < dist_map[i]))
       {
         dist_map[i] = temp;
@@ -296,28 +296,27 @@ int main(int argc, char **argv)
   double angular_resolution = 0.785; // 36 degress in radians
 
   int grid_width = std::floor(map_width/linear_resolution);
-  int grid_length = std::floor(map_height/linear_resolution);
+  int grid_height = std::floor(map_height/linear_resolution);
   int grid_depth = std::floor((2*M_PI)/angular_resolution);
 
   ROS_INFO("Grid width: %d", grid_width);
-  ROS_INFO("Grid length: %d", grid_length);
+  ROS_INFO("Grid height: %d", grid_height);
   ROS_INFO("Grid depth: %d", grid_depth);
-  long number_of_grid_cells = grid_width*grid_length*grid_depth;
+  long number_of_grid_cells = grid_width*grid_height*grid_depth;
 
   ROS_INFO("Number of grid cells: %d", number_of_grid_cells);
 
   // Get map origin
   // TODO: account for origin rotation
-  double map_x = map_srv.response.map.info.origin.position.x;
-  double map_y = map_srv.response.map.info.origin.position.y;
+  double map_origin_x = map_srv.response.map.info.origin.position.x;
+  double map_origin_y = map_srv.response.map.info.origin.position.y;
 
   // Initialise distribution uniformly
   ROS_INFO("Initialising distribution...");
   double previous_dist[50][50][73];
   double current_dist[50][50][73];
   double temp_prob = 0.5/(number_of_grid_cells-1); // equal distribuition at all the places where the robot isn't at
-  double p_bar_kt[50][50][73];
-  for (int r = 0; r < grid_length; r++)
+  for (int r = 0; r < grid_height; r++)
   {
     for (int c = 0; c < grid_width; c++)
     {
@@ -353,8 +352,8 @@ int main(int argc, char **argv)
     if(init_pose_recieved)
     {
       ROS_INFO("Initial pose: %f, %f", init_pose.pose.pose.position.x, init_pose.pose.pose.position.y);
-      int c = floor(float(init_pose.pose.pose.position.x - map_x)/linear_resolution);
-      int r = floor(float(init_pose.pose.pose.position.y - map_y)/linear_resolution);
+      int c = floor(float(init_pose.pose.pose.position.x - map_origin_x)/linear_resolution);
+      int r = floor(float(init_pose.pose.pose.position.y - map_origin_y)/linear_resolution);
       // The orientation is given in the range [-pi, pi], so it is shifted to [0, 2pi]
       // for ease of conversion into grid coordinates
       float temp_d = tf::getYaw(init_pose.pose.pose.orientation);
@@ -435,7 +434,7 @@ int main(int argc, char **argv)
       // Skip cells outside the rolling window
       if(counterK == (rolling_window_size*grid_depth))
       {
-        k += (grid_length - rolling_window_size)*grid_depth - 1;
+        k += (grid_width - rolling_window_size)*grid_depth - 1;
         counterK = 1;
         continue;
       }
@@ -444,10 +443,10 @@ int main(int argc, char **argv)
       int rowk, colk, depthk;
       double xt[3];
 
-      ind2sub(k, grid_length, grid_width, grid_depth, &rowk, &colk, &depthk);
+      ind2sub(k, grid_height, grid_width, grid_depth, &rowk, &colk, &depthk);
 
-      xt[0] = colk*linear_resolution + map_x;
-      xt[1] = rowk*linear_resolution + map_y;
+      xt[0] = colk*linear_resolution + map_origin_x;
+      xt[1] = rowk*linear_resolution + map_origin_y;
       xt[2] = depthk*angular_resolution;
       if(xt[2] > M_PI)
         xt[2] -= 2*M_PI;
@@ -460,7 +459,7 @@ int main(int argc, char **argv)
           continue;
         if(counterI == (rolling_window_size*grid_depth))
         {
-          i += (grid_length - rolling_window_size)*grid_depth - 1;
+          i += (grid_width - rolling_window_size)*grid_depth - 1;
           counterI = 1;
           continue;
         }
@@ -469,9 +468,9 @@ int main(int argc, char **argv)
         int rowi, coli, depthi;
         double xt_d1[3];
 
-        ind2sub(i, grid_length, grid_width, grid_depth, &rowi, &coli, &depthi);
-        xt_d1[0] = coli*linear_resolution + map_x;
-        xt_d1[1] = rowi*linear_resolution + map_y;
+        ind2sub(i, grid_height, grid_width, grid_depth, &rowi, &coli, &depthi);
+        xt_d1[0] = coli*linear_resolution + map_origin_x;
+        xt_d1[1] = rowi*linear_resolution + map_origin_y;
         xt_d1[2] = depthi*angular_resolution;
         if(xt_d1[2] > M_PI)
           xt_d1[2] -= 2*M_PI;
@@ -481,7 +480,7 @@ int main(int argc, char **argv)
 
       // =============================================
       // Calculate the unnormalised p_kt
-      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, map_srv.response.map.info.width, map_srv.response.map.info.height, map_x, map_y, map_srv.response.map.info.resolution);
+      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, map_srv.response.map.info.width, map_srv.response.map.info.height, map_origin_x, map_origin_y, map_srv.response.map.info.resolution);
       current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
       sum_of_dist_values += current_dist[rowk][colk][depthk];
     }
@@ -495,14 +494,14 @@ int main(int argc, char **argv)
     {
       if(counterK == (rolling_window_size*grid_depth))
       {
-        k += (grid_length - rolling_window_size)*grid_depth - 1;
+        k += (grid_width - rolling_window_size)*grid_depth - 1;
         counterK = 1;
         continue;
       }
       counterK++;
 
       int row, col, dep;
-      ind2sub(k, grid_length, grid_width, grid_depth, &row, &col, &dep);
+      ind2sub(k, grid_height, grid_width, grid_depth, &row, &col, &dep);
       current_dist[row][col][dep] /= sum_of_dist_values;
       previous_dist[row][col][dep] = current_dist[row][col][dep];
       p_bar_kt[row][col][dep] = 0.0;
@@ -520,8 +519,8 @@ int main(int argc, char **argv)
 
     current_pose.header.stamp = ros::Time::now();
     current_pose.header.frame_id = "map";
-    current_pose.pose.pose.position.x = max_c*linear_resolution+map_x;
-    current_pose.pose.pose.position.y = max_r*linear_resolution+map_y;
+    current_pose.pose.pose.position.x = max_c*linear_resolution+map_origin_x;
+    current_pose.pose.pose.position.y = max_r*linear_resolution+map_origin_y;
 
     // TODO: use actual rotation
     current_pose.pose.pose.orientation.x = 0;
