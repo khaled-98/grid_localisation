@@ -490,25 +490,32 @@ int main(int argc, char **argv)
     max_prob = 0.0;
 
     // normalise p_kt and publish the transform
-    for(int row = 0; row < grid_length; row++)
+    counterK = 1;
+    for(long k=window_start_index; k<window_end_index; k++)
     {
-      for(int col = 0; col < grid_width; col++)
+      if(counterK == (rolling_window_size*grid_depth))
       {
-        for(int dep = 0; dep < grid_depth; dep++)
-        {
-          current_dist[row][col][dep] /= sum_of_dist_values;
-          previous_dist[row][col][dep] = current_dist[row][col][dep];
-          p_bar_kt[row][col][dep] = 0.0;
-          if(current_dist[row][col][dep] > max_prob)
-          {
-            max_r = row;
-            max_c = col;
-            max_d = dep;
-            max_prob = current_dist[row][col][dep];
-          }
-        }
+        k += (grid_length - rolling_window_size)*grid_depth - 1;
+        counterK = 1;
+        continue;
       }
-    }
+      counterK++;
+
+      int row, col, dep;
+      ind2sub(k, grid_length, grid_width, grid_depth, &row, &col, &dep);
+      current_dist[row][col][dep] /= sum_of_dist_values;
+      previous_dist[row][col][dep] = current_dist[row][col][dep];
+      p_bar_kt[row][col][dep] = 0.0;
+      if(current_dist[row][col][dep] > max_prob)
+      {
+        max_r = row;
+        max_c = col;
+        max_d = dep;
+        max_prob = current_dist[row][col][dep];
+      }
+
+      }
+    }  
 
 
     current_pose.header.stamp = ros::Time::now();
