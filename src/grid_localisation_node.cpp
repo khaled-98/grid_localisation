@@ -346,7 +346,7 @@ int main(int argc, char **argv)
   double max_prob = 0.0;
 
   geometry_msgs::PoseWithCovarianceStamped current_pose;
-  double rolling_window_size = (2.0/linear_resolution)*(2.0/linear_resolution)*grid_depth;
+  int rolling_window_size = floor(2.0/linear_resolution);
 
   while(ros::ok())
   {
@@ -429,8 +429,18 @@ int main(int argc, char **argv)
     if(window_end_index > number_of_grid_cells)
       window_end_index = number_of_grid_cells;
 
+    long counterK = 1;
     for(long k = window_start_index; k < window_end_index; k++) // line 2 of table 8.1
     {
+      // Skip cells outside the rolling window
+      if(counterK == (rolling_window_size*grid_depth))
+      {
+        k += (grid_length - rolling_window_size)*grid_depth - 1;
+        counterK = 1;
+        continue;
+      }
+      counterK++;
+
       int rowk, colk, depthk;
       double xt[3];
 
@@ -443,10 +453,18 @@ int main(int argc, char **argv)
         xt[2] -= 2*M_PI;
 
       // ================ Prediction =================
+      long counterI = 1;
       for(long i = window_start_index; i < window_end_index; i++)
       {
         if(i==k)
           continue;
+        if(counterI == (rolling_window_size*grid_depth))
+        {
+          i += (grid_length - rolling_window_size)*grid_depth - 1;
+          counterI = 1;
+          continue;
+        }
+        counterI++;
 
         int rowi, coli, depthi;
         double xt_d1[3];
