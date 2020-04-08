@@ -69,7 +69,7 @@ double prob(double a, double b)
   return (1.0/(sqrt(2*M_PI)*b))*exp(-0.5*((a*a)/(b*b)));
 }
 
-float a1 = 0.1, a2 = 0.1, a3 = 0.1, a4 = 0.1;
+double a1 = 0.1, a2 = 0.1, a3 = 0.1, a4 = 0.1;
 double motion_model(double* xt, double* ut, double* xt_d1)
 {
   float alpha1 = a1, alpha2 = a2, alpha3=a3, alpha4=a4;
@@ -89,34 +89,31 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   double y = xt_d1[1];
   double theta = xt_d1[2];
 
-  double delta_rot1 = atan2(y_bar_prime-y_bar, x_bar_prime-x_bar) - theta_bar;
+  double delta_rot1 = angle_diff(atan2(y_bar_prime-y_bar, x_bar_prime-x_bar), theta_bar);
   double delta_trans =  sqrt((x_bar - x_bar_prime)*(x_bar - x_bar_prime) + (y_bar - y_bar_prime)*(y_bar - y_bar_prime));
-  double delta_rot2 =  theta_bar_prime - theta_bar - delta_rot1; // NOTE: for some reason AMCL doesn't subtract the second theta
+  double delta_rot2 =  angle_diff((theta_bar_prime - theta_bar), delta_rot1);
 
-  double delta_rot1_hat =  atan2(y_prime-y, x_prime-x) - theta;
+  double delta_rot1_hat =  angle_diff(atan2(y_prime-y, x_prime-x), theta);
   double delta_trans_hat = sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
-  double delta_rot2_hat = theta_prime - theta - delta_rot1_hat;
+  if(delta_trans_hat == 0) // on-the-spot turns are not possible
+    return 0.0;
+
+  double delta_rot2_hat = angle_diff((theta_prime - theta), delta_rot1_hat);
 
   double a, b, p1, p2, p3;
   a = angle_diff(delta_rot1, delta_rot1_hat);
   b = sqrt(alpha1*delta_rot1_hat*delta_rot1_hat + alpha2*delta_trans_hat*delta_trans_hat);
   if(b == 0)
-    p1 = 1.0;
-  else
     p1 = prob(a, b);
 
   a = delta_trans-delta_trans_hat;
   b = sqrt(alpha3*delta_trans_hat*delta_trans_hat + alpha4*delta_rot1_hat*delta_rot1_hat + alpha4*delta_rot2_hat*delta_rot2_hat);
   if(b == 0)
-    p2 = 1.0;
-  else
     p2 = prob(a, b);
   
   a = angle_diff(delta_rot2, delta_rot2_hat);
   b = sqrt(alpha1*delta_rot2_hat*delta_rot2_hat + alpha2*delta_trans_hat*delta_trans_hat);
   if(b == 0)
-    p3 = 1.0;
-  else
     p3 = prob(a, b);
 
   return p1*p2*p3;
