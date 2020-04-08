@@ -103,18 +103,15 @@ double motion_model(double* xt, double* ut, double* xt_d1)
   double a, b, p1, p2, p3;
   a = angle_diff(delta_rot1, delta_rot1_hat);
   b = sqrt(alpha1*delta_rot1_hat*delta_rot1_hat + alpha2*delta_trans_hat*delta_trans_hat);
-  if(b == 0)
-    p1 = prob(a, b);
+  p1 = prob(a, b);
 
   a = delta_trans-delta_trans_hat;
   b = sqrt(alpha3*delta_trans_hat*delta_trans_hat + alpha4*delta_rot1_hat*delta_rot1_hat + alpha4*delta_rot2_hat*delta_rot2_hat);
-  if(b == 0)
-    p2 = prob(a, b);
+  p2 = prob(a, b);
   
   a = angle_diff(delta_rot2, delta_rot2_hat);
   b = sqrt(alpha1*delta_rot2_hat*delta_rot2_hat + alpha2*delta_trans_hat*delta_trans_hat);
-  if(b == 0)
-    p3 = prob(a, b);
+  p3 = prob(a, b);
 
   return p1*p2*p3;
 }
@@ -255,6 +252,10 @@ void init_pose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& 
   ROS_INFO("New pose receieved");
 }
 
+double previous_dist[150][150][73];
+double current_dist[150][150][73];
+double p_bar_kt[150][150][73];
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "grid_localisation");
@@ -308,9 +309,6 @@ int main(int argc, char **argv)
 
   // Initialise distribution uniformly
   ROS_INFO("Initialising distribution...");
-  double previous_dist[150][150][8];
-  double current_dist[150][150][8];
-  double p_bar_kt[150][150][8];
   double temp_prob = 0.5/(number_of_grid_cells-1); // equal distribuition at all the places where the robot isn't at
   for (int r = 0; r < grid_height; r++)
   {
