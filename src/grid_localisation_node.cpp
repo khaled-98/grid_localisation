@@ -523,11 +523,16 @@ int main(int argc, char **argv)
     current_pose.pose.pose.position.x = max_c*linear_resolution+map_origin_x;
     current_pose.pose.pose.position.y = max_r*linear_resolution+map_origin_y;
 
-    // TODO: use actual rotation
-    current_pose.pose.pose.orientation.x = 0;
-    current_pose.pose.pose.orientation.y = 0;
-    current_pose.pose.pose.orientation.z = 0;
-    current_pose.pose.pose.orientation.w = 1;
+    float euler_orientation = max_d*angular_resolution;
+      if(euler_orientation > M_PI)
+        euler_orientation-= 2*M_PI;
+
+    tf::Quaternion quaternion_angle;
+    quaternion_angle.setEulerZYX(euler_orientation, 0, 0);
+    current_pose.pose.pose.orientation.x = quaternion_angle.getX();
+    current_pose.pose.pose.orientation.y = quaternion_angle.getY();
+    current_pose.pose.pose.orientation.z = quaternion_angle.getZ();
+    current_pose.pose.pose.orientation.w = quaternion_angle.getW();
 
     pose_pub.publish(current_pose);
 
