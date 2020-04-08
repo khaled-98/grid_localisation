@@ -32,7 +32,7 @@ long sub2ind(int n1, int n2, int n3, int N2, int N3)
 
 bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
 {
-  double linear_tol=0.1; // 3 degrees in radians
+  double linear_tol = 0.15;
   double x = prev.getOrigin().getX();
   double y = prev.getOrigin().getY();
   double theta = tf::getYaw(prev.getRotation());
@@ -52,18 +52,16 @@ double angle_diff(double a, double b)
 {
   double angle = a - b;
 
-  angle = fmod(a, 2.0*M_PI); // limit the angle from 0 to 2*Pi
+  angle = fmod(angle, 2.0*M_PI); // limit the angle from 0 to 2*Pi
 
-  if(angle<=M_PI && angle>-M_PI)
+  if(angle <= M_PI && angle >= -M_PI) // angle within the desired limit
     return angle;
 
-  if(angle > M_PI)
-  {
-    // angle is between pi and 2*pi so it needs to wrap around
-    return -M_PI + fmod(angle, M_PI);
-  }
-
-  return 0.0;
+  else if(angle > M_PI)   
+    return angle - 2.0*M_PI;
+  
+  else
+    return angle + 2.0*M_PI;
 }
 
 double prob(double a, double b)
