@@ -296,8 +296,8 @@ int main(int argc, char **argv)
   double map_width = map_srv.response.map.info.resolution*map_srv.response.map.info.width;
   double map_height = map_srv.response.map.info.resolution*map_srv.response.map.info.height;
 
-  double linear_resolution = 0.15; // 50 cm
-  double angular_resolution = 0.785; // 36 degress in radians
+  double linear_resolution = 0.15;
+  double angular_resolution = 0.125;
 
   int grid_width = std::floor(map_width/linear_resolution);
   int grid_height = std::floor(map_height/linear_resolution);
@@ -347,7 +347,7 @@ int main(int argc, char **argv)
   double max_prob = 0.0;
 
   geometry_msgs::PoseWithCovarianceStamped current_pose;
-  int rolling_window_size = floor(2.0/linear_resolution);
+  int rolling_window_size = floor(0.8/linear_resolution);
 
   while(ros::ok())
   {
@@ -397,8 +397,8 @@ int main(int argc, char **argv)
 
     // rolling window calculations
     // 1) Where to start the window from
-    double window_start_x = current_pose.pose.pose.position.x - 1;
-    double window_start_y = current_pose.pose.pose.position.y - 1;
+    double window_start_x = current_pose.pose.pose.position.x - 0.4;
+    double window_start_y = current_pose.pose.pose.position.y - 0.4;
     // 2) Adjust if out of bound
     if(window_start_x < map_srv.response.map.info.origin.position.x)
       window_start_x = map_srv.response.map.info.origin.position.x;
@@ -415,8 +415,8 @@ int main(int argc, char **argv)
     long window_start_index = sub2ind(int(window_start_y), int(window_start_x), 0, grid_width, grid_depth);
 
     // 3) Where to end the window
-    double window_end_x = current_pose.pose.pose.position.x + 1;
-    double window_end_y = current_pose.pose.pose.position.y + 1;
+    double window_end_x = current_pose.pose.pose.position.x + 0.4;
+    double window_end_y = current_pose.pose.pose.position.y + 0.4;
 
     window_end_x -= map_srv.response.map.info.origin.position.x;
     window_end_x /= linear_resolution;
