@@ -41,6 +41,14 @@ bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
   double y_prime = curr.getOrigin().getY();
   double theta_prime = tf::getYaw(curr.getRotation());
 
+  if( ((theta_prime>0.087) && (theta_prime<1.484)) ||
+      ((theta_prime>1.658) && (theta_prime<2.055)) ||
+      ((theta_prime>-3.055) && (theta_prime<-1.658)) ||
+      ((theta_prime>-1.484) && (theta_prime<-0.087)) )
+      {
+        linear_tol = 0.2121;
+      }
+
   // Check if the distance travelled is bigger than the tolerance
   if(sqrt((pow(x-x_prime, 2))+pow(y-y_prime, 2)) > linear_tol)
     return false;
