@@ -144,20 +144,20 @@ double measurement_model(float min_angle, float angle_increment, float min_range
   double min_y = map_origin_y;
   double max_y = map_origin_y + map_height*map_resolution;
 
-  for(int i = 0; i < 30; i++) // check 30 laser rays
+  for(int i = 0; i < 150; i++) // check 30 laser rays
   {
     // If the reading is above the maximum or below the minimum range of the LiDAR, discard it
-    if((ranges[i*5] >= max_range) || (ranges[i*5] <= min_range))
+    if((ranges[i] >= max_range) || (ranges[i] <= min_range))
       continue;
 
     // Calculate the angle of the beam and bound it to [-pi, pi]
-    float beam_angle = min_angle+angle_increment*i*5;
+    float beam_angle = min_angle+angle_increment*i;
     if(beam_angle < 0)
       beam_angle += 2*M_PI;
       
     // Project the beam end-point onto the map
-    float x_zkt = xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i*5]*cos(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
-    float y_zkt = xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i*5]*sin(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
+    float x_zkt = xt[0] + sensor_pose[0]*cos(xt[2]) - sensor_pose[1]*sin(xt[2]) + ranges[i]*cos(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
+    float y_zkt = xt[1] + sensor_pose[1]*cos(xt[2]) + sensor_pose[0]*sin(xt[2]) + ranges[i]*sin(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
 
     // temproary fix - discard readings that are out of bound
     if(x_zkt < min_x || x_zkt > max_x || y_zkt < min_y || y_zkt > max_y) // THESE VALUES NEED TO BE CHANGED!
