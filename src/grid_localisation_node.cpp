@@ -10,6 +10,8 @@
 #include <tf/transform_listener.h>
 #include "sensor_msgs/LaserScan.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
+#include <thread>
+#include <future>
 
 void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
@@ -263,6 +265,51 @@ void init_pose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& 
 double previous_dist[150][150][73];
 double current_dist[150][150][73];
 double p_bar_kt[150][150][73];
+std::vector<std::vector<int> > grid_locations_to_calculate;
+
+void calculate_grid(std::promise<long double> *promObj, long start_pose_location, long end_pose_location, double ut[], double linear_resolution, double angular_resolution, double map_origin_x, double map_origin_y, nav_msgs::GetMap map_srv, std::vector<float> current_laser_ranges, double laser_pose[])
+{
+  long double sum_of_dist_values = 0;
+  for(long k = start_pose_location; k < end_pose_location; k++) // line 2 of table 8.1
+  {
+    double xt[3];
+    int colk = grid_locations_to_calculate[k][0];
+    int rowk = grid_locations_to_calculate[k][1];
+    int depthk = grid_locations_to_calculate[k][2];
+
+    xt[0] = colk*linear_resolution + map_origin_x;
+    xt[1] = rowk*linear_resolution + map_origin_y;
+    xt[2] = depthk*angular_resolution;
+    if(xt[2] > M_PI)
+      xt[2] -= 2*M_PI;
+
+    for(long i = start_pose_location; i < end_pose_location; i++)
+    {
+      if(i==k)
+        continue;
+
+      double xt_d1[3];
+      int coli = grid_locations_to_calculate[i][0];
+      int rowi = grid_locations_to_calculate[i][1];
+      int depthi = grid_locations_to_calculate[i][2];
+
+      xt_d1[0] = coli*linear_resolution + map_origin_x;
+      xt_d1[1] = rowi*linear_resolution + map_origin_y;
+      xt_d1[2] = depthi*angular_resolution;
+      if(xt_d1[2] > M_PI)
+        xt_d1[2] -= 2*M_PI;
+
+      p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
+    }
+
+    // =============================================
+    // Calculate the unnormalised p_kt
+    double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, map_srv.response.map.info.width, map_srv.response.map.info.height, map_origin_x, map_origin_y, map_srv.response.map.info.resolution);
+    current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
+    sum_of_dist_values += current_dist[rowk][colk][depthk];
+  }
+  promObj->set_value(sum_of_dist_values);
+}
 
 int main(int argc, char **argv)
 {
@@ -430,80 +477,58 @@ int main(int argc, char **argv)
     if(window_end_index > number_of_grid_cells)
       window_end_index = number_of_grid_cells;
 
-    long counterK = 1;
-    for(long k = window_start_index; k < window_end_index; k++) // line 2 of table 8.1
+    long counterK = 0;
+    for(long k = window_start_index; k<window_end_index; k++)
     {
-      // Skip cells outside the rolling window
       if(counterK == (rolling_window_size*grid_depth))
       {
         k += (grid_width - rolling_window_size)*grid_depth - 1;
-        counterK = 1;
+        counterK = 0;
         continue;
       }
       counterK++;
 
       int rowk, colk, depthk;
-      double xt[3];
 
       ind2sub(k, grid_height, grid_width, grid_depth, &rowk, &colk, &depthk);
 
-      xt[0] = colk*linear_resolution + map_origin_x;
-      xt[1] = rowk*linear_resolution + map_origin_y;
-      xt[2] = depthk*angular_resolution;
-      if(xt[2] > M_PI)
-        xt[2] -= 2*M_PI;
-
-      // ================ Prediction =================
-      long counterI = 1;
-      for(long i = window_start_index; i < window_end_index; i++)
-      {
-        if(i==k)
-          continue;
-        if(counterI == (rolling_window_size*grid_depth))
-        {
-          i += (grid_width - rolling_window_size)*grid_depth - 1;
-          counterI = 1;
-          continue;
-        }
-        counterI++;
-
-        int rowi, coli, depthi;
-        double xt_d1[3];
-
-        ind2sub(i, grid_height, grid_width, grid_depth, &rowi, &coli, &depthi);
-        xt_d1[0] = coli*linear_resolution + map_origin_x;
-        xt_d1[1] = rowi*linear_resolution + map_origin_y;
-        xt_d1[2] = depthi*angular_resolution;
-        if(xt_d1[2] > M_PI)
-          xt_d1[2] -= 2*M_PI;
-
-        p_bar_kt[rowk][colk][depthk] += previous_dist[rowi][coli][depthi]*motion_model(xt, ut, xt_d1);
-      }
-
-      // =============================================
-      // Calculate the unnormalised p_kt
-      double temp_measure_model = measurement_model(laser_angle_min, laser_angle_increment, laser_range_min, laser_range_max, current_laser_ranges, xt, laser_pose, map_srv.response.map.info.width, map_srv.response.map.info.height, map_origin_x, map_origin_y, map_srv.response.map.info.resolution);
-      current_dist[rowk][colk][depthk] = p_bar_kt[rowk][colk][depthk]*temp_measure_model;
-      sum_of_dist_values += current_dist[rowk][colk][depthk];
+      grid_locations_to_calculate.push_back({colk, rowk, depthk});
     }
+    
+    long number_of_locations_per_thread = grid_locations_to_calculate.size()/4;
+    long number_of_leftover_locations = grid_locations_to_calculate.size()%4;
+    
+    std::vector<std::promise<long double>> promises(4);
+    std::vector<std::future<long double>> futures;
+    for(int i=0; i<4; i++)
+      futures.push_back(promises[i].get_future()); 
+    
+    std::vector<std::thread> threads;
+    threads.emplace_back(calculate_grid, &promises[0], 0*number_of_locations_per_thread, 1*number_of_locations_per_thread, ut, linear_resolution, angular_resolution, map_origin_x, map_origin_y, map_srv, current_laser_ranges, laser_pose);
+    threads.emplace_back(calculate_grid, &promises[1], 1*number_of_locations_per_thread, 2*number_of_locations_per_thread, ut, linear_resolution, angular_resolution, map_origin_x, map_origin_y, map_srv, current_laser_ranges, laser_pose);
+    threads.emplace_back(calculate_grid, &promises[2], 2*number_of_locations_per_thread, 3*number_of_locations_per_thread, ut, linear_resolution, angular_resolution, map_origin_x, map_origin_y, map_srv, current_laser_ranges, laser_pose);
+    threads.emplace_back(calculate_grid, &promises[3], 3*number_of_locations_per_thread, 4*number_of_locations_per_thread + number_of_leftover_locations, ut, linear_resolution, angular_resolution, map_origin_x, map_origin_y, map_srv, current_laser_ranges, laser_pose);
+
+    for(int i=0; i<4; i++)
+      sum_of_dist_values += futures[i].get();
+
+    for(std::thread &t : threads)
+      t.join();
+    
+    promises.clear();
+    futures.clear();
+    threads.clear();
 
     int max_r=0, max_c=0, max_d=0;
     max_prob = 0.0;
 
     // normalise p_kt and publish the transform
-    counterK = 1;
-    for(long k=window_start_index; k<window_end_index; k++)
+    for(long k = 0; k < grid_locations_to_calculate.size(); k++) // line 2 of table 8.1
     {
-      if(counterK == (rolling_window_size*grid_depth))
-      {
-        k += (grid_width - rolling_window_size)*grid_depth - 1;
-        counterK = 1;
-        continue;
-      }
-      counterK++;
+      int col = grid_locations_to_calculate[k][0];
+      int row = grid_locations_to_calculate[k][1];
+      int dep = grid_locations_to_calculate[k][2];
 
-      int row, col, dep;
-      ind2sub(k, grid_height, grid_width, grid_depth, &row, &col, &dep);
       current_dist[row][col][dep] /= sum_of_dist_values;
       previous_dist[row][col][dep] = current_dist[row][col][dep];
       p_bar_kt[row][col][dep] = 0.0;
@@ -516,8 +541,8 @@ int main(int argc, char **argv)
       }
 
       }
-    }  
-
+    }
+    grid_locations_to_calculate.clear();
 
     current_pose.header.stamp = ros::Time::now();
     current_pose.header.frame_id = "map";
