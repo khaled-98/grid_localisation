@@ -539,8 +539,6 @@ int main(int argc, char **argv)
         max_d = dep;
         max_prob = current_dist[row][col][dep];
       }
-
-      }
     }
     grid_locations_to_calculate.clear();
 
