@@ -34,7 +34,7 @@ long sub2ind(int n1, int n2, int n3, int N2, int N3)
 
 bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
 {
-  double linear_tol = 0.15;
+  double linear_tol = 0.1;
   double x = prev.getOrigin().getX();
   double y = prev.getOrigin().getY();
   double theta = tf::getYaw(prev.getRotation());
@@ -48,7 +48,7 @@ bool isNoMovement(tf::StampedTransform prev, tf::StampedTransform curr)
       ((theta_prime>-3.055) && (theta_prime<-1.658)) ||
       ((theta_prime>-1.484) && (theta_prime<-0.087)) )
       {
-        linear_tol = 0.2121;
+        linear_tol = 0.1414;
       }
 
   // Check if the distance travelled is bigger than the tolerance
@@ -343,7 +343,7 @@ int main(int argc, char **argv)
   double map_width = map_srv.response.map.info.resolution*map_srv.response.map.info.width;
   double map_height = map_srv.response.map.info.resolution*map_srv.response.map.info.height;
 
-  double linear_resolution = 0.15;
+  double linear_resolution = 0.1;
   double angular_resolution = 0.125;
 
   int grid_width = std::floor(map_width/linear_resolution);
