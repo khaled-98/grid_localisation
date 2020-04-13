@@ -16,7 +16,7 @@
 #include <thread>
 #include <future>
 
-void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
+void ind2sub(unsigned long long index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
   // Don't even ask
   // https://eli.thegreenplace.net/2015/memory-layout-of-multi-dimensional-arrays/
@@ -29,7 +29,7 @@ void ind2sub(long index, int N1, int N2, int N3, int* i, int* j, int* k)
   *k = n3;
 }
 
-long sub2ind(int n1, int n2, int n3, int N2, int N3)
+unsigned long long sub2ind(int n1, int n2, int n3, int N2, int N3)
 {
   // https://eli.thegreenplace.net/2015/memory-layout-of-multi-dimensional-arrays/
   return n3 + N3*(n2+N2*n1);
@@ -454,6 +454,12 @@ void GridLocalisationNode::updateRollingWindow()
   window_end_x_ = curr_pose_.pose.pose.position.x + (rolling_window_length_/2);
   window_end_y_ = curr_pose_.pose.pose.position.y + (rolling_window_length_/2);
 
+  window_end_x_ -= map_origin_x_;
+  window_end_x_ /= grid_linear_resolution_;
+
+  window_end_y_ -= map_origin_y_;
+  window_end_y_ /= grid_linear_resolution_; 
+
   window_end_index_ = sub2ind(int(window_end_y_), int(window_end_x_), 0, grid_width_, grid_depth_);
   if(window_end_index_ > number_of_grid_cells_)
     window_end_index_ = number_of_grid_cells_;
@@ -511,7 +517,7 @@ void GridLocalisationNode::runGridLocalisation()
     int dep = grid_locations_to_calculate_[i][2];
 
     p_kt_[row][col][dep] /= sum_of_dist_values_;
-    p_kt_1_[row][col][dep] = 0.0;
+    p_kt_1_[row][col][dep] = p_kt_[row][col][dep];
     p_bar_kt_[row][col][dep] = 0.0;
     if(p_kt_[row][col][dep] > max_prob)
     {
