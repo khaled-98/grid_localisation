@@ -207,10 +207,14 @@ include_directories(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
+find_package(Threads)
 add_executable(grid_localisation src/grid_localisation_node.cpp)
 target_link_libraries(grid_localisation ${catkin_LIBRARIES})
+target_link_libraries (grid_localisation ${CMAKE_THREAD_LIBS_INIT})
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+set(CMAKE_CXX_FLAGS "-std=c++11")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_CXX_FLAGS_DEBUG "-O3")
