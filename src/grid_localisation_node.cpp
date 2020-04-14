@@ -125,6 +125,8 @@ private:
   double laser_angle_increment_;
   std::vector<float> latest_laser_ranges_;
 
+  bool init_pose_recieved_;
+
   double map_width_;
   double map_height_;
   double map_origin_x_;
@@ -190,7 +192,8 @@ int main(int argc, char **argv)
 
 GridLocalisationNode::GridLocalisationNode() :
                     private_nh_("~"),
-                    laser_info_recieved_(false)
+                    laser_info_recieved_(false),
+                    init_pose_recieved_(false)
 {
   private_nh_.param("odom_alpha1", alpha1_, 0.01);
   private_nh_.param("odom_alpha2", alpha2_, 0.5);
@@ -312,7 +315,7 @@ void GridLocalisationNode::laserRecived(const sensor_msgs::LaserScanConstPtr& la
 
 void GridLocalisationNode::initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
 {
-  ROS_INFO("Initial pose: %f, %f", msg->pose.pose.position.x, msg->pose.pose.position.y);
+  ROS_INFO("Initial pose: %f, %f, %f", msg->pose.pose.position.x, msg->pose.pose.position.y, tf::getYaw(msg->pose.pose.orientation));
   int col = floor(float(msg->pose.pose.position.x - map_origin_x_)/grid_linear_resolution_);
   int row = floor(float(msg->pose.pose.position.y - map_origin_y_)/grid_linear_resolution_);
   // The orientation is given in the range [-pi, pi], so it is shifted to [0, 2pi]
@@ -325,6 +328,7 @@ void GridLocalisationNode::initialPoseReceived(const geometry_msgs::PoseWithCova
   p_kt_1_[row][col][dep] = 1.0;
 
   curr_pose_ = *msg;
+  init_pose_recieved_ = true;
 }
 
 
@@ -382,14 +386,13 @@ void GridLocalisationNode::computeLikelihoodField()
 void GridLocalisationNode::initialiseDistributions()
 {
   ROS_INFO("Initialising distributions...");
-  double temp_prob = 1/(number_of_grid_cells_);
   for (int row = 0; row < grid_height_; row++)
   {
     for (int col = 0; col < grid_width_; col++)
     {
       for (int dep = 0; dep < grid_depth_; dep++)
       {
-        p_kt_1_[row][col][dep] = temp_prob;
+        p_kt_1_[row][col][dep] = 0.0;
         p_bar_kt_[row][col][dep] = 0.0;
       }
     }
@@ -674,7 +677,7 @@ void GridLocalisationNode::calculateGrid(std::promise<long double> *promObj, uns
     }
 
     p_kt_[rowk][colk][depk] = p_bar_kt_[rowk][colk][depk]*laserModel(xt);
-    sum_of_dist_values_ += p_kt_[rowk][colk][depk];
+    sum_of_values += p_kt_[rowk][colk][depk];
   }
   promObj->set_value(sum_of_values);
 }
