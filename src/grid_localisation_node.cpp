@@ -253,8 +253,8 @@ GridLocalisationNode::GridLocalisationNode() :
   {
     ros::spinOnce();
 
-    // Do not do the calculations if the robot has not moved
-    if(noMotion())
+    // Wait for initial pose
+    if(!init_pose_recieved_)
       continue;
 
     ROS_INFO("ROUND STARTED!");
@@ -580,9 +580,6 @@ double GridLocalisationNode::motionModel(double* xt, std::vector<double> &ut, do
 
   double delta_rot1_hat =  angle_diff(atan2(y_prime-y, x_prime-x), theta);
   double delta_trans_hat = sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
-  if(delta_trans_hat == 0) // on-the-spot turns are not possible
-    return 0.0;
-
   double delta_rot2_hat = angle_diff((theta_prime - theta), delta_rot1_hat);
 
   double a, b, p1, p2, p3;
@@ -597,6 +594,15 @@ double GridLocalisationNode::motionModel(double* xt, std::vector<double> &ut, do
   a = angle_diff(delta_rot2, delta_rot2_hat);
   b = sqrt(alpha1_*delta_rot2_hat*delta_rot2_hat + alpha2_*delta_trans_hat*delta_trans_hat);
   p3 = prob(a, b);
+
+  // std comes out to be zero when turning on the spot
+  if(std::isnan(p1*p2*p3))
+  {
+    if(noMotion())  // if there has been no motion, then we are indeed turning on the spot
+      return 1.0;
+    else
+      return 0.0;   // otherwise this hypothesis is not valid
+  }
 
   return p1*p2*p3;  
 }
@@ -665,9 +671,6 @@ void GridLocalisationNode::calculateGrid(std::promise<long double> *promObj, uns
     
     for(unsigned long long i = start_pose_location; i < end_pose_location; i++)
     {
-      if(i==k)
-        continue;
-      
       double xt_1[3];
       int coli = grid_locations_to_calculate_[i][0];
       int rowi = grid_locations_to_calculate_[i][1];
