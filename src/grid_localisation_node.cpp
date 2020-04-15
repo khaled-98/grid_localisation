@@ -129,11 +129,13 @@ private:
 
   double map_width_;
   double map_height_;
+  uint32_t map_width_in_grids_;
+  uint32_t map_height_in_grids_;
   double map_origin_x_;
   double map_origin_y_;
   float map_resolution_;
   std::vector<int8_t> map_data_;
-  std::vector<int8_t> likelihood_data_;
+  std::vector<double> likelihood_data_;
 
   double grid_linear_resolution_;
   double grid_angular_resolution_;
@@ -327,7 +329,8 @@ void GridLocalisationNode::initialPoseReceived(const geometry_msgs::PoseWithCova
   int dep = floor(temp_d);
   p_kt_1_[row][col][dep] = 1.0;
 
-  curr_pose_ = *msg;
+  curr_pose_.pose.pose = msg->pose.pose;
+  curr_pose_.header = msg->header;
   init_pose_recieved_ = true;
 }
 
@@ -350,19 +353,21 @@ void GridLocalisationNode::requestMap()
 
 void GridLocalisationNode::handleMapMessage(const nav_msgs::OccupancyGrid &msg)
 {
-  map_width_ = msg.info.resolution*msg.info.width;
-  map_height_ = msg.info.resolution*msg.info.height;
+  map_width_in_grids_ = msg.info.width;
+  map_width_ = msg.info.resolution*map_width_in_grids_;
+  map_height_in_grids_ = msg.info.height;
+  map_height_ = msg.info.resolution*map_height_in_grids_;
   map_origin_x_ = msg.info.origin.position.x;
   map_origin_y_ = msg.info.origin.position.y;
   map_resolution_ = msg.info.resolution;
   map_data_ = msg.data;
-  likelihood_data_.assign(map_data_.size(), 0);
+  likelihood_data_.assign(map_data_.size(), 0.0);
 }
 
 void GridLocalisationNode::computeLikelihoodField()
 {
   ROS_INFO("Calculating likelihood field...");
-  for(unsigned long long i = 0; i < map_width_*map_height_; i++)
+  for(unsigned long long i = 0; i < map_width_in_grids_*map_height_in_grids_; i++)
   {
     if(map_data_[i]==100)
     {
@@ -370,12 +375,12 @@ void GridLocalisationNode::computeLikelihoodField()
       continue;
     }
 
-    for(unsigned long long j = 0; j < map_width_*map_height_; j++)
+    for(unsigned long long j = 0; j < map_width_in_grids_*map_height_in_grids_; j++)
     {
       if(map_data_[j] != 100)
         continue;
 
-      float temp = measure_distance(i, j, map_width_, map_resolution_);
+      float temp = measure_distance(i, j, map_width_in_grids_, map_resolution_);
       if((likelihood_data_[i] == 0) || (temp < likelihood_data_[i]))
         likelihood_data_[i] = temp;
     }
@@ -474,6 +479,7 @@ void GridLocalisationNode::updateRollingWindow()
     {
       i += (grid_width_ - rolling_window_grid_length_)*grid_depth_ - 1;
       counter = 0;
+      continue;
     }
     counter ++;
 
@@ -600,9 +606,9 @@ double GridLocalisationNode::laserModel(double* xt)
   double q = 1.0;
   double z_max = laser_max_range_, z_rand_max = z_random_/z_max;
   double min_x = map_origin_x_;
-  double max_x = map_origin_x_ + map_width_*map_resolution_;
+  double max_x = map_origin_x_ + map_width_;
   double min_y = map_origin_y_;
-  double max_y = map_origin_y_ + map_height_*map_resolution_;
+  double max_y = map_origin_y_ + map_height_;
 
   for(int i = 0; i < 150; i++) // check 30 laser rays
   {
@@ -632,7 +638,7 @@ double GridLocalisationNode::laserModel(double* xt)
     y_zkt /= map_resolution_;
     
     // Get the relevant point from the likelhood field
-    int index = map2ind(int(x_zkt), int(y_zkt), map_width_);
+    int index = map2ind(int(x_zkt), int(y_zkt), map_width_in_grids_);
     float dist = likelihood_data_[index];
 
     q *= (z_hit_*prob(dist, sigma_hit_) + z_rand_max);
