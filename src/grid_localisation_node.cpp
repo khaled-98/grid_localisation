@@ -126,6 +126,11 @@ private:
   std::vector<float> latest_laser_ranges_;
 
   bool init_pose_recieved_;
+  bool init_pose_set_;
+  bool publish_tf_;
+
+  double initial_pose_x_;
+  double initial_pose_y_;
 
   double map_width_;
   double map_height_;
@@ -197,6 +202,12 @@ GridLocalisationNode::GridLocalisationNode() :
                     laser_info_recieved_(false),
                     init_pose_recieved_(false)
 {
+  private_nh_.param("initial_pose_set", init_pose_set_, true);
+  private_nh_.param("initial_pose_x", initial_pose_x_, 1.0);
+  private_nh_.param("initial_pose_y", initial_pose_y_, 1.0);
+
+  private_nh_.param("tf_broadcast", publish_tf_, true);
+
   private_nh_.param("odom_alpha1", alpha1_, 0.01);
   private_nh_.param("odom_alpha2", alpha2_, 0.5);
   private_nh_.param("odom_alpha3", alpha3_, 0.5);
@@ -245,16 +256,26 @@ GridLocalisationNode::GridLocalisationNode() :
   getLaserPose();
 
   // Initilaise current pose
-  curr_pose_.pose.pose.position.x = curr_pose_.pose.pose.position.y = curr_pose_.pose.pose.position.z = 0.0;
+  curr_pose_.pose.pose.position.x = initial_pose_x_;
+  curr_pose_.pose.pose.position.y = initial_pose_y_;
+  curr_pose_.pose.pose.position.z = 0.0;
   curr_pose_.pose.pose.orientation.x = curr_pose_.pose.pose.orientation.y = curr_pose_.pose.pose.orientation.z = 0.0;
   curr_pose_.pose.pose.orientation.w = 1.0;
+  curr_pose_.header.frame_id = global_frame_id_;
+
+  if(init_pose_set_)
+  {
+    int col = floor(float(initial_pose_x_ - map_origin_x_)/grid_linear_resolution_);
+    int row = floor(float(initial_pose_y_ - map_origin_y_)/grid_linear_resolution_);
+    p_kt_1_[row][col][0] = 1.0;
+  }
 
   while(ros::ok())
   {
     ros::spinOnce();
 
     // Wait for initial pose
-    if(!init_pose_recieved_)
+    if(!init_pose_recieved_ && !init_pose_set_)
       continue;
 
     ROS_INFO("ROUND STARTED!");
@@ -304,7 +325,8 @@ void GridLocalisationNode::laserRecived(const sensor_msgs::LaserScanConstPtr& la
     tf_->transformPose(odom_frame_id_, base_to_map_pose_stamped, odom_to_map_pose_stamped);
     tf::Transform odom_to_map_tf = tf::Transform(tf::Quaternion(odom_to_map_pose_stamped.getRotation()),
                                                  tf::Point(odom_to_map_pose_stamped.getOrigin()));
-    tfb_->sendTransform(tf::StampedTransform(odom_to_map_tf.inverse(), laser_scan->header.stamp, global_frame_id_, odom_frame_id_));
+    if(publish_tf_)
+      tfb_->sendTransform(tf::StampedTransform(odom_to_map_tf.inverse(), laser_scan->header.stamp, global_frame_id_, odom_frame_id_));
   }
   catch(tf::TransformException &ex)
   {
