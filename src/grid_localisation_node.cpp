@@ -562,11 +562,16 @@ void GridLocalisationNode::runGridLocalisation()
       
     // Project the beam end-point onto the map
     float x_zkt = xt[0] + laser_pose_[0]*cos(xt[2]) - laser_pose_[1]*sin(xt[2]) + latest_laser_ranges_[i]*cos(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
+    if(x_zkt < min_x)
+      x_zkt = min_x;
+    else if(x_zkt > max_x)
+      x_zkt = max_x;
+    
     float y_zkt = xt[1] + laser_pose_[1]*cos(xt[2]) + laser_pose_[0]*sin(xt[2]) + latest_laser_ranges_[i]*sin(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
-
-    // temproary fix - discard readings that are out of bound
-    if(x_zkt < min_x || x_zkt > max_x || y_zkt < min_y || y_zkt > max_y) // THESE VALUES NEED TO BE CHANGED!
-      continue;
+    if(y_zkt < min_y)
+      y_zkt = min_y;
+    else if(y_zkt > max_y)
+      y_zkt = max_y;
 
     // Project the points onto the likelihood field by subreacting the origin and dividing by the map resoluiton
     x_zkt -= map_origin_x_;
@@ -577,9 +582,11 @@ void GridLocalisationNode::runGridLocalisation()
     
     // If there is no known obstacle within 10m of this beam, ignore it!
     int index = map2ind(int(x_zkt), int(y_zkt), map_width_in_grids_);
-    if(index>=0 && likelihood_data_[index]>0.1)
+    if(likelihood_data_[index]>0.25)
       beams_to_skip_.insert(i);
   }
+  if(beams_to_skip_.size()>=100)
+    beams_to_skip_.clear();
   // =========================================================================================
 
   unsigned long long number_of_locations_per_thread = grid_locations_to_calculate_.size()/4;
