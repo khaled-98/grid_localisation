@@ -15,6 +15,7 @@
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include <thread>
 #include <future>
+#include <unordered_set>
 
 void ind2sub(unsigned long long index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
@@ -124,6 +125,7 @@ private:
   double laser_min_angle_;
   double laser_angle_increment_;
   std::vector<float> latest_laser_ranges_;
+  std::unordered_set<int> beams_to_skip_;
 
   bool init_pose_recieved_;
   bool init_pose_set_;
@@ -278,12 +280,12 @@ GridLocalisationNode::GridLocalisationNode() :
     if(!init_pose_recieved_ && !init_pose_set_)
       continue;
 
-    ROS_INFO("ROUND STARTED!");
+    // ROS_INFO("ROUND STARTED!");
     updateRollingWindow();
     runGridLocalisation();
     pose_pub_.publish(curr_pose_);
     prev_odom_to_base_tf_ = curr_odom_to_base_tf_;
-    ROS_INFO("ROUND ENDED");
+    // ROS_INFO("ROUND ENDED");
   }
 }
 
