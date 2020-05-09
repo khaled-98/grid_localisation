@@ -515,6 +515,73 @@ void GridLocalisationNode::updateRollingWindow()
 
 void GridLocalisationNode::runGridLocalisation()
 {
+
+  // ============================= DYNAMIC =============================
+  // ========= Estimate where the robot is based on the last estimate and the odom =========
+  double x_bar = ut_[0];
+  double y_bar = ut_[1];
+  double theta_bar = ut_[2];
+
+  double x_bar_prime = ut_[3];
+  double y_bar_prime = ut_[4];
+  double theta_bar_prime = ut_[5];
+
+  double delta_x = x_bar_prime - x_bar;
+  double delta_y = y_bar_prime - y_bar;
+  double delta_theta = theta_bar_prime - theta_bar;
+
+  double x_estimate = curr_pose_.pose.pose.position.x + delta_x;
+  double y_estimate = curr_pose_.pose.pose.position.y + delta_y;
+
+  tf::Quaternion quat;
+  tf::quaternionMsgToTF(curr_pose_.pose.pose.orientation, quat);
+  double roll, pitch, yaw;
+  tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+
+  double theta_estimate = yaw + delta_theta;
+  double xt[] = {x_estimate, y_estimate, theta_estimate};
+  // =========================================================================================
+
+  beams_to_skip_.clear();
+
+  double min_x = map_origin_x_;
+  double max_x = map_origin_x_ + map_width_;
+  double min_y = map_origin_y_;
+  double max_y = map_origin_y_ + map_height_;
+  //========== Using the above estimate, map the laser end-points ============================
+  for(int i = 0; i < 150; i++) // check 30 laser rays
+  {
+    // If the reading is above the maximum or below the minimum range of the LiDAR, discard it
+    if((latest_laser_ranges_[i] >= laser_max_range_) || (latest_laser_ranges_[i] <= laser_min_range_))
+      continue;
+
+    // Calculate the angle of the beam and bound it to [-pi, pi]
+    float beam_angle = laser_min_angle_ + laser_angle_increment_*i;
+    if(beam_angle < 0)
+      beam_angle += 2*M_PI;
+      
+    // Project the beam end-point onto the map
+    float x_zkt = xt[0] + laser_pose_[0]*cos(xt[2]) - laser_pose_[1]*sin(xt[2]) + latest_laser_ranges_[i]*cos(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
+    float y_zkt = xt[1] + laser_pose_[1]*cos(xt[2]) + laser_pose_[0]*sin(xt[2]) + latest_laser_ranges_[i]*sin(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
+
+    // temproary fix - discard readings that are out of bound
+    if(x_zkt < min_x || x_zkt > max_x || y_zkt < min_y || y_zkt > max_y) // THESE VALUES NEED TO BE CHANGED!
+      continue;
+
+    // Project the points onto the likelihood field by subreacting the origin and dividing by the map resoluiton
+    x_zkt -= map_origin_x_;
+    y_zkt -= map_origin_y_;
+
+    x_zkt /= map_resolution_;
+    y_zkt /= map_resolution_;
+    
+    // If there is no known obstacle within 10m of this beam, ignore it!
+    int index = map2ind(int(x_zkt), int(y_zkt), map_width_in_grids_);
+    if(index>=0 && likelihood_data_[index]>0.1)
+      beams_to_skip_.insert(i);
+  }
+  // =========================================================================================
+
   unsigned long long number_of_locations_per_thread = grid_locations_to_calculate_.size()/4;
   unsigned long long number_of_leftover_locations = grid_locations_to_calculate_.size()%4;
 
@@ -642,6 +709,9 @@ double GridLocalisationNode::laserModel(double* xt)
 
   for(int i = 0; i < 150; i++) // check 30 laser rays
   {
+    if(beams_to_skip_.find(i)!=beams_to_skip_.end())
+      continue;
+
     // If the reading is above the maximum or below the minimum range of the LiDAR, discard it
     if((latest_laser_ranges_[i] >= laser_max_range_) || (latest_laser_ranges_[i] <= laser_min_range_))
       continue;
