@@ -1,0 +1,88 @@
+<launch>
+
+    <arg name="bag_dir" default="/home/khaled/Downloads" />
+    <arg name="file" default="2012-02-02-10-44-08.bag" />
+    <param name="/use_sim_time" value="true" />
+
+    <node pkg="tf" type="tf_remap" name="tf_remapper" output="screen">
+        <rosparam param="mappings"> [{old: /odom_combined, new: /odom}] </rosparam>
+    </node>
+
+    <node pkg="rosbag" type="play" name="player" output="screen" args="--clock $(arg bag_dir)/$(arg file)">
+        <remap from="tf" to="tf_old" />
+    </node>
+
+    <node type="rviz" name="rviz" pkg="rviz" args="-d /home/khaled/catkin_ws/src/grid_localisation/rviz/conf.rviz"/>
+
+    <!-- Wrong? -->
+    <!-- <node pkg="tf" type="static_transform_publisher" name="link_broadcaster" args="0.14350911105 -0.0964248846142 0.998048618989 0.0001387 0.0003193 0 1 base_link laser 100" /> -->
+
+    <!-- <node pkg="gmapping" type="slam_gmapping" name="gmapping_thing" output="screen" >
+        <remap from="/scan" to="/base_scan"/>
+        <param name="odom_frame" value="odom" />
+        <param name="base_frame" value="odom" />
+        <param name="map_update_interval" value="1.0"/>
+        <param name="maxUrange" value="80.0"/>
+        <param name="sigma" value="0.05"/>
+        <param name="kernelSize" value="1"/>
+        <param name="lstep" value="0.05"/>
+        <param name="astep" value="0.05"/>
+        <param name="iterations" value="5"/>
+        <param name="lsigma" value="0.075"/>
+        <param name="ogain" value="3.0"/>
+        <param name="lskip" value="10"/>
+        <param name="srr" value="0.1"/>
+        <param name="srt" value="0.2"/>
+        <param name="str" value="0.1"/>
+        <param name="stt" value="0.2"/>
+        <param name="linearUpdate" value="0.1"/>
+        <param name="angularUpdate" value="0.1"/>
+        <param name="temporalUpdate" value="3.0"/>
+        <param name="resampleThreshold" value="0.5"/>
+        <param name="particles" value="30"/>
+        <param name="xmin" value="-30.0"/>
+        <param name="ymin" value="-30.0"/>
+        <param name="xmax" value="30.0"/>
+        <param name="ymax" value="30.0"/>
+        <param name="delta" value="0.05"/>
+        <param name="llsamplerange" value="0.01"/>
+        <param name="llsamplestep" value="0.01"/>
+        <param name="lasamplerange" value="0.005"/>
+        <param name="lasamplestep" value="0.005"/>
+    </node> -->
+
+    <node name="map_server" pkg="map_server" type="map_server"
+       args="/home/khaled/catkin_ws/src/grid_localisation/maps/floor2.yaml"/>
+
+    <node pkg="grid_localisation" type="grid_localisation" name="grid_localisation_node" output="screen">
+        <param name="initial_pose_x" value="0.0"/>
+        <param name="initial_pose_y" value="0.0"/>
+        <param name="laser_frame_id" value="base_laser_link"/>
+        <param name="scan_topic" value="base_scan"/>
+        <param name ="tf_broadcast" value="true"/>
+        <param name="odom_alpha1" value="0.2"/>
+        <param name="odom_alpha2" value="0.2"/>
+        <param name="odom_alpha3" value="0.2"/>
+        <param name="odom_alpha4" value="0.2"/>    
+        <param name="odom_alpha5" value="0.2"/>    
+        <param name="rolling_window_length" value="1.0"/>    
+    </node>
+
+    <!-- <node pkg="amcl" type="amcl" name="amcl">
+        <remap from="/scan" to="/base_scan"/>
+        <param name="odom_model_type" value="omni"/>
+        <param name="odom_alpha1" value="0.2"/>
+        <param name="odom_alpha2" value="0.2"/>
+        <param name="odom_alpha3" value="0.8"/>
+        <param name="odom_alpha4" value="0.2"/>
+        <param name="update_min_d" value="0.1"/>
+        <param name="update_min_a" value="0.1"/>
+        <param name="global_frame_id" value="/map"/>
+        <param name="base_frame_id" value="/base_link"/>
+        <param name="odom_frame_id" value="/odom"/>
+        <param name="resample_interval" value="1"/>
+        <param name="initial_pose_x" value="0.0"/>
+        <param name="initial_pose_y" value="0.0"/>
+        <param name="initial_pose_a" value="0.0"/>
+    </node> -->
+</launch>

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<launch>
+
+  <!-- <arg name="init_pos_x" default="1.0"/>
+  <arg name="init_pos_y" default="1.0"/>
+  <arg name="init_pos_z" default="0.0"/>
+  <arg name="init_pos_yaw" default="0"/> -->
+
+  <!-- <node type="rviz" name="rviz" pkg="rviz" args="-d $(find final_year_project)/rviz/basic_config.rviz" /> -->
+
+  <!-- ====================================================================== -->
+
+  <!-- Run Grid Localisation -->
+  <node pkg="grid_localisation" type="grid_localisation" name="grid_localisation_node" output="screen">
+    <param name="initial_pose_x" value="0.0"/>
+    <param name="initial_pose_y" value="0.0"/>
+    <param name="laser_frame_id" value="base_laser_link"/>
+    <param name="scan_topic" value="base_scan"/>
+    <param name ="tf_broadcast" value="true"/>
+    <param name="odom_alpha1" value="0.2"/>
+    <param name="odom_alpha2" value="0.2"/>
+    <param name="odom_alpha3" value="0.2"/>
+    <param name="odom_alpha4" value="0.2"/>    
+    <param name="odom_alpha5" value="0.2"/>    
+    <!-- <param name="grid_linear_resolution" value="0.2"/>     -->
+    <!-- <param name="grid_angular_resolution" value="0.2"/>     -->
+    <param name="rolling_window_length" value="1.0"/>    
+  </node>
+
+</launch>

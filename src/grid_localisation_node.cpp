@@ -15,6 +15,7 @@
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include <thread>
 #include <future>
+#include <unordered_map>
 
 void ind2sub(unsigned long long index, int N1, int N2, int N3, int* i, int* j, int* k)
 {
@@ -114,6 +115,7 @@ private:
   double alpha2_; 
   double alpha3_; 
   double alpha4_;
+  double alpha5_;
 
   double z_hit_;
   double z_random_;
@@ -159,9 +161,9 @@ private:
   unsigned long long window_end_index_;
   std::vector<std::vector<int> > grid_locations_to_calculate_;
 
-  double p_kt_1_[150][150][73];
-  double p_bar_kt_[150][150][73];
-  double p_kt_[150][150][73];
+  std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double> > > p_kt_1_;
+  std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double> > > p_bar_kt_;
+  std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double> > > p_kt_;
   long double sum_of_dist_values_;
 
   std::vector<double> laser_pose_;
@@ -169,11 +171,14 @@ private:
 
   geometry_msgs::PoseWithCovarianceStamped curr_pose_;
 
+  std::mutex vector_mutex_;
+
   void laserRecived(const sensor_msgs::LaserScanConstPtr& laser_scan);
   void initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
   void requestMap();
   void handleMapMessage(const nav_msgs::OccupancyGrid& msg);
   void computeLikelihoodField();
+  void DFS(const int &index_curr, const int &index_of_obstacle, std::vector<bool> &visited);
   void initialiseDistributions();
   void getLaserPose();
   bool noMotion();
@@ -212,6 +217,7 @@ GridLocalisationNode::GridLocalisationNode() :
   private_nh_.param("odom_alpha2", alpha2_, 0.5);
   private_nh_.param("odom_alpha3", alpha3_, 0.5);
   private_nh_.param("odom_alpha4", alpha4_, 0.01);
+  private_nh_.param("odom_alpha5", alpha4_, 0.01);
 
   private_nh_.param("laser_z_hit", z_hit_, 0.95);
   private_nh_.param("laser_z_random", z_random_, 0.05);
@@ -275,15 +281,15 @@ GridLocalisationNode::GridLocalisationNode() :
     ros::spinOnce();
 
     // Wait for initial pose
-    if(!init_pose_recieved_ && !init_pose_set_)
+    if(!init_pose_recieved_ && !init_pose_set_ || !laser_info_recieved_)
       continue;
 
-    ROS_INFO("ROUND STARTED!");
+    // ROS_INFO("ROUND STARTED!");
     updateRollingWindow();
     runGridLocalisation();
     pose_pub_.publish(curr_pose_);
     prev_odom_to_base_tf_ = curr_odom_to_base_tf_;
-    ROS_INFO("ROUND ENDED");
+    // ROS_INFO("ROUND ENDED");
   }
 }
 
@@ -297,8 +303,10 @@ GridLocalisationNode::~GridLocalisationNode()
 
 void GridLocalisationNode::laserRecived(const sensor_msgs::LaserScanConstPtr& laser_scan)
 {
+  
   if(!laser_info_recieved_)
   {
+    ROS_INFO("Recieved");
     laser_max_range_ = laser_scan->range_max;
     laser_min_range_ = laser_scan->range_min;
     laser_min_angle_ = laser_scan->angle_min;
@@ -389,41 +397,89 @@ void GridLocalisationNode::handleMapMessage(const nav_msgs::OccupancyGrid &msg)
 void GridLocalisationNode::computeLikelihoodField()
 {
   ROS_INFO("Calculating likelihood field...");
+
+  std::vector<int> occupied_cells;
+
   for(unsigned long long i = 0; i < map_width_in_grids_*map_height_in_grids_; i++)
   {
     if(map_data_[i]==100)
     {
       likelihood_data_[i] = 0;
-      continue;
+      occupied_cells.push_back(i);
     }
-
-    for(unsigned long long j = 0; j < map_width_in_grids_*map_height_in_grids_; j++)
-    {
-      if(map_data_[j] != 100)
-        continue;
-
-      float temp = measure_distance(i, j, map_width_in_grids_, map_resolution_);
-      if((likelihood_data_[i] == 0) || (temp < likelihood_data_[i]))
-        likelihood_data_[i] = temp;
-    }
+    else
+      likelihood_data_[i] = 2;
   }
+
+  std::vector<bool> visited(map_width_in_grids_*map_height_in_grids_, false);
+  for(auto i : occupied_cells)
+    DFS(i, i, visited);
+
+  for(auto i=0; i < map_width_in_grids_*map_height_in_grids_; i++)
+		likelihood_data_[i] = (1.0/(sqrt(2*M_PI)*sigma_hit_))*exp(-0.5*((likelihood_data_[i]*likelihood_data_[i])/(sigma_hit_*sigma_hit_)));
+
   ROS_INFO("Completed likelihood field calculation");
 }
+
+void GridLocalisationNode::DFS(const int &index_curr, const int &index_of_obstacle, std::vector<bool> &visited)
+{
+	visited[index_curr] = true;
+  int* coord = ind2map(index_curr, map_width_in_grids_);
+	std::pair<uint32_t, uint32_t> coord_curr;
+  coord_curr.first = coord[0];
+  coord_curr.second = coord[1];
+
+	// This cell is NOT an obstacle
+	if(likelihood_data_[index_curr]!=0.0)	
+	{
+		double distance_to_obstacle = measure_distance(index_curr, index_of_obstacle, map_width_in_grids_, map_resolution_);
+
+		// Getting far from the obstacle
+		if(distance_to_obstacle >= 2)
+			return;
+
+		// Found a closer obstacle
+		if(distance_to_obstacle < likelihood_data_[index_curr])
+			likelihood_data_[index_curr] = distance_to_obstacle;
+	}
+
+	// left
+	if(coord_curr.first > 0)
+	{
+		int left_cell_index =  map2ind(coord_curr.first-1, coord_curr.second, map_width_in_grids_);
+    if(!visited[left_cell_index])
+			DFS(left_cell_index, index_of_obstacle, visited);
+	}
+
+	// right
+	if(coord_curr.first < map_width_in_grids_-1)
+	{
+		int right_cell_index =  map2ind(coord_curr.first+1, coord_curr.second, map_width_in_grids_);
+		if(!visited[right_cell_index])
+			DFS(right_cell_index, index_of_obstacle, visited);
+	}
+
+	// up
+	if(coord_curr.second > 0)
+	{
+		int up_cell_index =  map2ind(coord_curr.first, coord_curr.second-1, map_width_in_grids_);
+		if(!visited[up_cell_index])
+			DFS(up_cell_index, index_of_obstacle, visited);
+	}
+
+	// down
+	if(coord_curr.second < map_height_in_grids_-1)
+	{
+		int down_cell_index =  map2ind(coord_curr.first, coord_curr.second+1, map_width_in_grids_);
+		if(!visited[down_cell_index])
+			DFS(down_cell_index, index_of_obstacle, visited);
+	}
+}
+
 
 void GridLocalisationNode::initialiseDistributions()
 {
   ROS_INFO("Initialising distributions...");
-  for (int row = 0; row < grid_height_; row++)
-  {
-    for (int col = 0; col < grid_width_; col++)
-    {
-      for (int dep = 0; dep < grid_depth_; dep++)
-      {
-        p_kt_1_[row][col][dep] = 0.0;
-        p_bar_kt_[row][col][dep] = 0.0;
-      }
-    }
-  }
   ROS_INFO("Initialised!");
 }
 
@@ -513,23 +569,28 @@ void GridLocalisationNode::updateRollingWindow()
 
 void GridLocalisationNode::runGridLocalisation()
 {
-  unsigned long long number_of_locations_per_thread = grid_locations_to_calculate_.size()/4;
-  unsigned long long number_of_leftover_locations = grid_locations_to_calculate_.size()%4;
+  if(!laser_info_recieved_)
+    return; 
 
+  int number_of_threads{16};
+  unsigned long long number_of_locations_per_thread = grid_locations_to_calculate_.size()/number_of_threads;
+  unsigned long long number_of_leftover_locations = grid_locations_to_calculate_.size()%number_of_threads;
 
-  std::vector<std::promise<long double>> promises(4);
+  std::vector<std::promise<long double>> promises(number_of_threads);
   std::vector<std::future<long double>> futures;
-  for(int i=0; i<4; i++)
+  for(int i=0; i<number_of_threads; i++)
     futures.push_back(promises[i].get_future()); 
   
   std::vector<std::thread> threads;
-  threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[0], 0*number_of_locations_per_thread, 1*number_of_locations_per_thread);
-  threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[1], 1*number_of_locations_per_thread, 2*number_of_locations_per_thread);
-  threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[2], 2*number_of_locations_per_thread, 3*number_of_locations_per_thread);
-  threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[3], 3*number_of_locations_per_thread, 4*number_of_locations_per_thread + number_of_leftover_locations);
+  for(int i=0; i<number_of_threads-1; i++)
+  {
+    threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[i], i*number_of_locations_per_thread, (i+1)*number_of_locations_per_thread);
+  }
+  
+  threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[number_of_threads-1], (number_of_threads-1)*number_of_locations_per_thread, number_of_threads*number_of_locations_per_thread + number_of_leftover_locations);
 
   sum_of_dist_values_ = 0.0;
-  for(int i=0; i<4; i++)
+  for(int i=0; i<number_of_threads; i++)
     sum_of_dist_values_ += futures[i].get();
 
   for(std::thread &t : threads)
@@ -538,6 +599,7 @@ void GridLocalisationNode::runGridLocalisation()
   promises.clear();
   futures.clear();
   threads.clear();
+
 
   int max_row=0, max_col=0, max_dep=0;
   double max_prob = 0.0;
@@ -596,25 +658,23 @@ double GridLocalisationNode::motionModel(double* xt, std::vector<double> &ut, do
   double y = xt_1[1];
   double theta = xt_1[2];
 
-  double delta_rot1 = angle_diff(atan2(y_bar_prime-y_bar, x_bar_prime-x_bar), theta_bar);
   double delta_trans =  sqrt((x_bar - x_bar_prime)*(x_bar - x_bar_prime) + (y_bar - y_bar_prime)*(y_bar - y_bar_prime));
-  double delta_rot2 =  angle_diff((theta_bar_prime - theta_bar), delta_rot1);
-
-  double delta_rot1_hat =  angle_diff(atan2(y_prime-y, x_prime-x), theta);
+  double delta_rot = theta_bar_prime - theta_bar;
+  
   double delta_trans_hat = sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
-  double delta_rot2_hat = angle_diff((theta_prime - theta), delta_rot1_hat);
+  double delta_rot_hat =  theta_prime - theta;
 
   double a, b, p1, p2, p3;
-  a = angle_diff(delta_rot1, delta_rot1_hat);
-  b = sqrt(alpha1_*delta_rot1_hat*delta_rot1_hat + alpha2_*delta_trans_hat*delta_trans_hat);
+  a = angle_diff(delta_rot, delta_rot_hat);
+  b = sqrt(alpha4_*delta_rot_hat*delta_rot_hat + alpha2_*delta_trans_hat*delta_trans_hat);
   p1 = prob(a, b);
 
   a = delta_trans-delta_trans_hat;
-  b = sqrt(alpha3_*delta_trans_hat*delta_trans_hat + alpha4_*delta_rot1_hat*delta_rot1_hat + alpha4_*delta_rot2_hat*delta_rot2_hat);
+  b = sqrt(alpha3_*delta_trans_hat*delta_trans_hat + alpha1_*delta_rot_hat*delta_rot_hat);
   p2 = prob(a, b);
   
-  a = angle_diff(delta_rot2, delta_rot2_hat);
-  b = sqrt(alpha1_*delta_rot2_hat*delta_rot2_hat + alpha2_*delta_trans_hat*delta_trans_hat);
+  a = 0.0;
+  b = sqrt(alpha1_*delta_rot_hat*delta_rot_hat + alpha5_*delta_trans_hat*delta_trans_hat);
   p3 = prob(a, b);
 
   // std comes out to be zero when turning on the spot
@@ -677,6 +737,8 @@ double GridLocalisationNode::laserModel(double* xt)
 
 void GridLocalisationNode::calculateGrid(std::promise<long double> *promObj, unsigned long long start_pose_location, unsigned long long end_pose_location)
 {
+  std::lock_guard<std::mutex> lock(vector_mutex_);
+
   long double sum_of_values = 0.0;
   for(unsigned long long k = start_pose_location; k < end_pose_location; k++)
   {
