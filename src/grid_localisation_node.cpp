@@ -174,6 +174,7 @@ private:
   geometry_msgs::PoseWithCovarianceStamped curr_pose_;
 
   std::mutex vector_mutex_;
+  int number_of_threads_;
 
   void laserRecived(const sensor_msgs::LaserScanConstPtr& laser_scan);
   void initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
@@ -235,6 +236,8 @@ GridLocalisationNode::GridLocalisationNode() :
   private_nh_.param("base_frame_id", base_frame_id_, std::string("base_link"));
   private_nh_.param("laser_frame_id", laser_frame_id_, std::string("base_laser_front_link"));
   private_nh_.param("global_frame_id", global_frame_id_, std::string("map"));
+
+  private_nh_.param("number_of_threads", number_of_threads_, 4);
 
   tfb_ = new tf::TransformBroadcaster();
   tf_ = new tf::TransformListener();
@@ -576,25 +579,24 @@ void GridLocalisationNode::runGridLocalisation()
   if(!laser_info_recieved_)
     return; 
 
-  int number_of_threads{16};
-  unsigned long long number_of_locations_per_thread = grid_locations_to_calculate_.size()/number_of_threads;
-  unsigned long long number_of_leftover_locations = grid_locations_to_calculate_.size()%number_of_threads;
+  unsigned long long number_of_locations_per_thread = grid_locations_to_calculate_.size()/number_of_threads_;
+  unsigned long long number_of_leftover_locations = grid_locations_to_calculate_.size()%number_of_threads_;
 
-  std::vector<std::promise<long double>> promises(number_of_threads);
+  std::vector<std::promise<long double>> promises(number_of_threads_);
   std::vector<std::future<long double>> futures;
-  for(int i=0; i<number_of_threads; i++)
+  for(int i=0; i<number_of_threads_; i++)
     futures.push_back(promises[i].get_future()); 
   
   std::vector<std::thread> threads;
-  for(int i=0; i<number_of_threads-1; i++)
+  for(int i=0; i<number_of_threads_-1; i++)
   {
     threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[i], i*number_of_locations_per_thread, (i+1)*number_of_locations_per_thread);
   }
   
-  threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[number_of_threads-1], (number_of_threads-1)*number_of_locations_per_thread, number_of_threads*number_of_locations_per_thread + number_of_leftover_locations);
+  threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[number_of_threads_-1], (number_of_threads_-1)*number_of_locations_per_thread, number_of_threads_*number_of_locations_per_thread + number_of_leftover_locations);
 
   sum_of_dist_values_ = 0.0;
-  for(int i=0; i<number_of_threads; i++)
+  for(int i=0; i<number_of_threads_; i++)
     sum_of_dist_values_ += futures[i].get();
 
   for(std::thread &t : threads)
