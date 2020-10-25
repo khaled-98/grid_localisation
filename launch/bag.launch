@@ -59,16 +59,21 @@
         <param name="initial_pose_y" value="0.0"/>
         <param name="laser_frame_id" value="base_laser_link"/>
         <param name="scan_topic" value="base_scan"/>
-        <param name ="tf_broadcast" value="true"/>
-        <param name="odom_alpha1" value="0.2"/>
-        <param name="odom_alpha2" value="0.2"/>
-        <param name="odom_alpha3" value="0.2"/>
-        <param name="odom_alpha4" value="0.2"/>    
-        <param name="odom_alpha5" value="0.2"/>    
+        <param name ="tf_broadcast" value="false"/>
+        <param name="odom_alpha1" value="0.1"/>
+        <param name="odom_alpha2" value="0.1"/>
+        <param name="odom_alpha3" value="0.1"/>
+        <param name="odom_alpha4" value="0.1"/>    
+        <param name="odom_alpha5" value="0.8"/>    
+        <param name="number_of_beams_to_use" value="130"/>    
+        <param name="grid_linear_resolution" value="0.08"/>    
+        <param name="grid_angular_resolution" value="0.1"/>    
         <param name="rolling_window_length" value="1.0"/>    
+        <param name="laser_z_hit" value="0.5"/>    
+        <param name="laser_z_random" value="0.5"/>    
     </node>
 
-    <!-- <node pkg="amcl" type="amcl" name="amcl">
+    <node pkg="amcl" type="amcl" name="amcl">
         <remap from="/scan" to="/base_scan"/>
         <param name="odom_model_type" value="omni"/>
         <param name="odom_alpha1" value="0.2"/>
@@ -84,5 +89,5 @@
         <param name="initial_pose_x" value="0.0"/>
         <param name="initial_pose_y" value="0.0"/>
         <param name="initial_pose_a" value="0.0"/>
-    </node> -->
+    </node>
 </launch>

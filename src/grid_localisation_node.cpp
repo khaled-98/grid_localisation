@@ -125,6 +125,8 @@ private:
   double laser_min_range_;
   double laser_min_angle_;
   double laser_angle_increment_;
+  int number_of_beams_;
+  int number_of_beams_to_use_;
   std::vector<float> latest_laser_ranges_;
 
   bool init_pose_recieved_;
@@ -222,6 +224,7 @@ GridLocalisationNode::GridLocalisationNode() :
   private_nh_.param("laser_z_hit", z_hit_, 0.95);
   private_nh_.param("laser_z_random", z_random_, 0.05);
   private_nh_.param("laser_sigma_hit", sigma_hit_, 0.2);
+  private_nh_.param("number_of_beams_to_use", number_of_beams_to_use_, 150);
 
   private_nh_.param("grid_linear_resolution", grid_linear_resolution_, 0.1);
   private_nh_.param("grid_angular_resolution", grid_angular_resolution_, 0.125);
@@ -303,10 +306,9 @@ GridLocalisationNode::~GridLocalisationNode()
 
 void GridLocalisationNode::laserRecived(const sensor_msgs::LaserScanConstPtr& laser_scan)
 {
-  
   if(!laser_info_recieved_)
   {
-    ROS_INFO("Recieved");
+    number_of_beams_ = laser_scan->ranges.size();
     laser_max_range_ = laser_scan->range_max;
     laser_min_range_ = laser_scan->range_min;
     laser_min_angle_ = laser_scan->angle_min;
@@ -408,12 +410,14 @@ void GridLocalisationNode::computeLikelihoodField()
       occupied_cells.push_back(i);
     }
     else
-      likelihood_data_[i] = 2;
+      likelihood_data_[i] = 100;
   }
 
-  std::vector<bool> visited(map_width_in_grids_*map_height_in_grids_, false);
   for(auto i : occupied_cells)
+  {
+    std::vector<bool> visited(map_width_in_grids_*map_height_in_grids_, false);
     DFS(i, i, visited);
+  }
 
   for(auto i=0; i < map_width_in_grids_*map_height_in_grids_; i++)
 		likelihood_data_[i] = (1.0/(sqrt(2*M_PI)*sigma_hit_))*exp(-0.5*((likelihood_data_[i]*likelihood_data_[i])/(sigma_hit_*sigma_hit_)));
@@ -435,7 +439,7 @@ void GridLocalisationNode::DFS(const int &index_curr, const int &index_of_obstac
 		double distance_to_obstacle = measure_distance(index_curr, index_of_obstacle, map_width_in_grids_, map_resolution_);
 
 		// Getting far from the obstacle
-		if(distance_to_obstacle >= 2)
+		if(distance_to_obstacle >= 2.0)
 			return;
 
 		// Found a closer obstacle
@@ -698,20 +702,22 @@ double GridLocalisationNode::laserModel(double* xt)
   double min_y = map_origin_y_;
   double max_y = map_origin_y_ + map_height_;
 
-  for(int i = 0; i < 150; i++) // check 30 laser rays
+  int beam_increment = number_of_beams_/number_of_beams_to_use_;
+
+  for(int i = 0; i < number_of_beams_to_use_; i++) // check 30 laser rays
   {
     // If the reading is above the maximum or below the minimum range of the LiDAR, discard it
-    if((latest_laser_ranges_[i] >= laser_max_range_) || (latest_laser_ranges_[i] <= laser_min_range_))
+    if((latest_laser_ranges_[i*beam_increment] >= laser_max_range_) || (latest_laser_ranges_[i*beam_increment] <= laser_min_range_))
       continue;
 
     // Calculate the angle of the beam and bound it to [-pi, pi]
-    float beam_angle = laser_min_angle_ + laser_angle_increment_*i;
+    float beam_angle = laser_min_angle_ + laser_angle_increment_*i*beam_increment;
     if(beam_angle < 0)
       beam_angle += 2*M_PI;
       
     // Project the beam end-point onto the map
-    float x_zkt = xt[0] + laser_pose_[0]*cos(xt[2]) - laser_pose_[1]*sin(xt[2]) + latest_laser_ranges_[i]*cos(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
-    float y_zkt = xt[1] + laser_pose_[1]*cos(xt[2]) + laser_pose_[0]*sin(xt[2]) + latest_laser_ranges_[i]*sin(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
+    float x_zkt = xt[0] + laser_pose_[0]*cos(xt[2]) - laser_pose_[1]*sin(xt[2]) + latest_laser_ranges_[i*beam_increment]*cos(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
+    float y_zkt = xt[1] + laser_pose_[1]*cos(xt[2]) + laser_pose_[0]*sin(xt[2]) + latest_laser_ranges_[i*beam_increment]*sin(xt[2] + beam_angle); // assume that the sensor is not mounted at angle
 
     // temproary fix - discard readings that are out of bound
     if(x_zkt < min_x || x_zkt > max_x || y_zkt < min_y || y_zkt > max_y) // THESE VALUES NEED TO BE CHANGED!
@@ -769,7 +775,7 @@ void GridLocalisationNode::calculateGrid(std::promise<long double> *promObj, uns
       p_bar_kt_[rowk][colk][depk] += p_kt_1_[rowi][coli][depi]*motionModel(xt, ut_, xt_1);
     }
 
-    p_kt_[rowk][colk][depk] = p_bar_kt_[rowk][colk][depk]*laserModel(xt);
+    p_kt_[rowk][colk][depk] = p_bar_kt_[rowk][colk][depk];//*laserModel(xt);
     sum_of_values += p_kt_[rowk][colk][depk];
   }
   promObj->set_value(sum_of_values);
