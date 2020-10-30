@@ -7,9 +7,9 @@ GridLocalisationNode::GridLocalisationNode() : private_nh_("~")
     private_nh_.param("base_frame_id", base_frame_id_, std::string("base_link"));
     private_nh_.param("laser_topic", laser_topic_, std::string("base_scan"));
 
-    motion_model_ = std::make_shared<MotionModel>(nh_);
-    measurement_model_ = std::make_shared<MeasurementModel>(nh_);
-    grid_localisation_ = std::make_shared<GridLocalisation>(nh_, motion_model_, measurement_model_);
+    motion_model_ = std::make_shared<MotionModel>();
+    measurement_model_ = std::make_shared<MeasurementModel>();
+    grid_localisation_ = std::make_shared<GridLocalisation>(motion_model_, measurement_model_);
 
     grid_localisation_->set_map(request_map());
 
@@ -22,7 +22,6 @@ GridLocalisationNode::GridLocalisationNode() : private_nh_("~")
                                                                                           100,
                                                                                           nh_);
     laser_scan_filter_->registerCallback(std::bind(&GridLocalisationNode::scan_callback, this, std::placeholders::_1));
-    // laser_scan_filter_->registerCallback(boom);
 }
 
 nav_msgs::OccupancyGrid GridLocalisationNode::request_map()
@@ -48,6 +47,7 @@ void GridLocalisationNode::scan_callback(const sensor_msgs::LaserScanConstPtr &s
     try
     {
         curr_odom_ = tf_buffer_->lookupTransform(odom_frame_id_, base_frame_id_, scan->header.stamp, ros::Duration(1.0));
+        grid_localisation_->localise(scan);
     }
     catch(tf2::TransformException &ex)
     {
