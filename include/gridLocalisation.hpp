@@ -5,6 +5,7 @@
 #include "../include/motionModel.hpp"
 #include "../include/measurementModel.hpp"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
+#include "geometry_msgs/TransformStamped.h"
 #include "sensor_msgs/LaserScan.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include <unordered_map>
@@ -15,7 +16,8 @@ class GridLocalisation
 public:
     GridLocalisation(const std::shared_ptr<MotionModel> &motion_model,
                      const std::shared_ptr<MeasurementModel> &measurement_model);
-    geometry_msgs::PoseWithCovarianceStamped localise(const sensor_msgs::LaserScanConstPtr &scan);
+    geometry_msgs::PoseWithCovarianceStamped localise(const sensor_msgs::LaserScanConstPtr &scan,
+                                                      const geometry_msgs::TransformStamped &curr_odom);
     void set_map(const nav_msgs::OccupancyGrid &map);
 private:
     ros::NodeHandle nh_;
@@ -35,6 +37,7 @@ private:
 
     int number_of_grid_rows_;
     int number_of_grid_cols_;
+    int number_of_grid_layers_;
     
     bool starting_point_set_;
     double starting_x_;
@@ -42,6 +45,7 @@ private:
     double starting_theta_;
 
     geometry_msgs::PoseWithCovarianceStamped curr_pose_;
+    geometry_msgs::TransformStamped prev_odom_;
     std::vector<int> index_of_map_cells_in_grid_;
 };
 

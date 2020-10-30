@@ -15,6 +15,11 @@ GridLocalisation::GridLocalisation(const std::shared_ptr<MotionModel> &motion_mo
     private_nh_.param("starting_x", starting_x_, 0.0);
     private_nh_.param("starting_y", starting_y_, 0.0);
     private_nh_.param("starting_theta", starting_theta_, 0.0);
+
+    // if(starting_point_set_) // initialise distrubition
+    // {
+
+    // }
 }
 
 void GridLocalisation::set_map(const nav_msgs::OccupancyGrid &map)
@@ -24,6 +29,7 @@ void GridLocalisation::set_map(const nav_msgs::OccupancyGrid &map)
 
     number_of_grid_rows_ = (map.info.height*map.info.resolution)/grid_linear_resolution_;
     number_of_grid_cols_ = (map.info.width*map.info.resolution)/grid_linear_resolution_;
+    number_of_grid_layers_ = (2*M_PI)/grid_angular_resolution_;
 
     int rows_to_skip = map.info.height/number_of_grid_rows_;
     int cols_to_skip = map.info.width/number_of_grid_cols_;
@@ -40,11 +46,19 @@ void GridLocalisation::set_map(const nav_msgs::OccupancyGrid &map)
     }
 }
 
-geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor_msgs::LaserScanConstPtr &scan)
+geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor_msgs::LaserScanConstPtr &scan,
+                                                                    const geometry_msgs::TransformStamped &curr_odom)
 {
     // Do not attempt to localise unless you have a map and you know where you are
     if(!map_recieved_ || !starting_point_set_)
         return curr_pose_;
 
+    // We haven't gone anywhere!
+    if(!Utils::has_moved(prev_odom_, curr_odom, grid_linear_resolution_, grid_angular_resolution_))
+        return curr_pose_;
+
+    // Run through the grid here
+    
+    prev_odom_ = curr_odom;
     return curr_pose_;
 }

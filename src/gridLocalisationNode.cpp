@@ -26,7 +26,6 @@ GridLocalisationNode::GridLocalisationNode() : private_nh_("~")
 
 nav_msgs::OccupancyGrid GridLocalisationNode::request_map()
 {
-
     nav_msgs::GetMap::Request req;
     nav_msgs::GetMap::Response resp;
 
@@ -47,7 +46,7 @@ void GridLocalisationNode::scan_callback(const sensor_msgs::LaserScanConstPtr &s
     try
     {
         curr_odom_ = tf_buffer_->lookupTransform(odom_frame_id_, base_frame_id_, scan->header.stamp, ros::Duration(1.0));
-        grid_localisation_->localise(scan);
+        grid_localisation_->localise(scan, curr_odom_);
     }
     catch(tf2::TransformException &ex)
     {
