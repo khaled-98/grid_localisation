@@ -8,7 +8,7 @@
 class MeasurementModel
 {
 public:
-    MeasurementModel(const ros::NodeHandle &nh);
+    MeasurementModel();
     double run(const int* xt, sensor_msgs::LaserScanConstPtr &scan);
     void compute_likelihood_field_prob(nav_msgs::OccupancyGridConstPtr &map);
 private:
@@ -17,6 +17,8 @@ private:
     double z_rand_;
     double z_max_;
     std::vector<double> likelihood_field_prob_;
+
+    ros::NodeHandle private_nh_;
 };
 
 #endif /* SRC_GRID_LOCALISATION_INCLUDE_MEASUREMENTMODEL */

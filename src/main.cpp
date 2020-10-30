@@ -1,21 +1,12 @@
 #include "ros/ros.h"
-#include "../include/gridLocalisation.hpp"
-#include "../include/motionModel.hpp"
-#include "../include/measurementModel.hpp"
+#include "../include/gridLocalisationNode.hpp"
+#include "tf2_ros/message_filter.h"
+#include "message_filters/subscriber.h"
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "grid_localisation");
-    ros::NodeHandle nh;
-    
-    std::shared_ptr<MotionModel> motion_model = std::make_shared<MotionModel>(nh);
-    std::shared_ptr<MeasurementModel> measurement_model = std::make_shared<MeasurementModel>(nh);
-    
-    GridLocalisation grid_localisation(nh, motion_model, measurement_model);
-
-    while (ros::ok())
-    {
-
-    }
-    return 0;
+  ros::init(argc, argv, "grid_localisation");
+  GridLocalisationNode grid_localisation_node;
+  ros::spin();
+  return 0;
 }
