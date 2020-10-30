@@ -10,6 +10,7 @@
 #include "nav_msgs/OccupancyGrid.h"
 #include <unordered_map>
 #include <vector>
+#include <utility>
 
 class GridLocalisation
 {
@@ -27,10 +28,13 @@ private:
     std::shared_ptr<MeasurementModel> measurement_model_;
     
     bool map_recieved_{false};
+    double map_origin_x_;
+    double map_origin_y_;
+    double map_resolution_;
 
-    std::unordered_map<int, std::unordered_map<int, double>> p_bar_k_t_;
-    std::unordered_map<int, std::unordered_map<int, double>> p_k_t_;
-    std::unordered_map<int, std::unordered_map<int, double>> p_k_t_1_;
+    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_bar_k_t_;
+    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_t_;
+    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_t_1_;
 
     double grid_linear_resolution_;
     double grid_angular_resolution_;
@@ -46,7 +50,7 @@ private:
 
     geometry_msgs::PoseWithCovarianceStamped curr_pose_;
     geometry_msgs::TransformStamped prev_odom_;
-    std::vector<int> index_of_map_cells_in_grid_;
+    std::vector<std::pair<int, int>> map_cells_in_grid_;
 };
 
 #endif /* SRC_GRID_LOCALISATION_INCLUDE_GRIDLOCALISATION */

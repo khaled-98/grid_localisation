@@ -34,6 +34,7 @@ add_library(libraries
   src/measurementModel.cpp
   src/gridLocalisation.cpp
   src/gridLocalisationNode.cpp
+  src/utils.cpp
 )
 
 target_link_libraries(libraries ${catkin_LIBRARIES})

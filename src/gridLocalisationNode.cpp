@@ -5,7 +5,10 @@ GridLocalisationNode::GridLocalisationNode() : private_nh_("~")
 {
     private_nh_.param("odom_frame_id", odom_frame_id_, std::string("odom"));
     private_nh_.param("base_frame_id", base_frame_id_, std::string("base_link"));
+    private_nh_.param("global_frame_id", global_frame_id_, std::string("map"));
     private_nh_.param("laser_topic", laser_topic_, std::string("base_scan"));
+
+    curr_location_pub_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("current_location", 100);
 
     motion_model_ = std::make_shared<MotionModel>();
     measurement_model_ = std::make_shared<MeasurementModel>();
@@ -46,7 +49,11 @@ void GridLocalisationNode::scan_callback(const sensor_msgs::LaserScanConstPtr &s
     try
     {
         curr_odom_ = tf_buffer_->lookupTransform(odom_frame_id_, base_frame_id_, scan->header.stamp, ros::Duration(1.0));
-        grid_localisation_->localise(scan, curr_odom_);
+        geometry_msgs::PoseWithCovarianceStamped curr_location = grid_localisation_->localise(scan, curr_odom_);
+        curr_location.header.stamp = ros::Time::now();
+        curr_location.header.frame_id = global_frame_id_;
+        curr_location_pub_.publish(curr_location);
+        // ROS_ERROR("`%f, %f", curr_location.pose.pose.position.x, curr_location.pose.pose.position.y);
     }
     catch(tf2::TransformException &ex)
     {

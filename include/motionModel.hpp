@@ -7,7 +7,7 @@ class MotionModel
 {
 public:
     MotionModel();
-    double run(const int* xt, const int* xt_1, const int* ut, const int* ut_1);
+    double run(const double* xt, const double* xt_1, const double* ut, const double* ut_1);
 private:
     double alpha1_;
     double alpha2_;

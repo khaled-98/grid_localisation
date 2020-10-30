@@ -30,6 +30,7 @@ private:
 
     std::string odom_frame_id_;
     std::string base_frame_id_;
+    std::string global_frame_id_;
     std::string laser_topic_;
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
@@ -37,6 +38,7 @@ private:
     std::shared_ptr<message_filters::Subscriber<sensor_msgs::LaserScan>> laser_scan_sub_;
 
     geometry_msgs::TransformStamped curr_odom_;
+    ros::Publisher curr_location_pub_;
 };
 
 #endif /* SRC_GRID_LOCALISATION_INCLUDE_GRIDLOCALISATIONNODE */
