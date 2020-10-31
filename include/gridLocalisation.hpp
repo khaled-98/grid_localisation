@@ -50,7 +50,6 @@ private:
 
     geometry_msgs::PoseWithCovarianceStamped curr_pose_;
     geometry_msgs::TransformStamped prev_odom_;
-    std::vector<std::pair<int, int>> map_cells_in_grid_;
 };
 
 #endif /* SRC_GRID_LOCALISATION_INCLUDE_GRIDLOCALISATION */

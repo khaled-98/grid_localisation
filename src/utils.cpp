@@ -13,15 +13,15 @@ double get_angle_from_quat(geometry_msgs::Quaternion quat_geo)
 {
     tf2::Quaternion quat_tf;
     tf2::fromMsg(quat_geo, quat_tf);
-    return tf2::impl::getYaw(quat_tf); // from 0 to 2pi
+    return tf2::impl::getYaw(quat_tf);
 }
 
-geometry_msgs::Quaternion getQuat(double roll)
+geometry_msgs::Quaternion getQuat(double yaw)
 {
     tf2::Quaternion tf_quat;
     geometry_msgs::Quaternion geo_quat;
 
-    tf_quat.setEuler(0.0, 0.0, roll);
+    tf_quat.setRPY(0.0, 0.0, yaw);
     tf2::convert(tf_quat, geo_quat);
 
     return geo_quat;
