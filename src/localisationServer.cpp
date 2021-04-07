@@ -1,7 +1,7 @@
-#include "../include/gridLocalisationNode.hpp"
+#include "../include/localisationServer.hpp"
 #include "nav_msgs/GetMap.h"
 
-GridLocalisationNode::GridLocalisationNode() : private_nh_("~")
+LocalisationServer::LocalisationServer() : private_nh_("~")
 {
     private_nh_.param("odom_frame_id", odom_frame_id_, std::string("odom"));
     private_nh_.param("base_frame_id", base_frame_id_, std::string("base_link"));
@@ -24,10 +24,10 @@ GridLocalisationNode::GridLocalisationNode() : private_nh_("~")
                                                                                           odom_frame_id_,
                                                                                           100,
                                                                                           nh_);
-    laser_scan_filter_->registerCallback(std::bind(&GridLocalisationNode::scan_callback, this, std::placeholders::_1));
+    laser_scan_filter_->registerCallback(std::bind(&LocalisationServer::scan_callback, this, std::placeholders::_1));
 }
 
-nav_msgs::OccupancyGrid GridLocalisationNode::request_map()
+nav_msgs::OccupancyGrid LocalisationServer::request_map()
 {
     nav_msgs::GetMap::Request req;
     nav_msgs::GetMap::Response resp;
@@ -44,7 +44,7 @@ nav_msgs::OccupancyGrid GridLocalisationNode::request_map()
     return resp.map;
 }
 
-void GridLocalisationNode::scan_callback(const sensor_msgs::LaserScanConstPtr &scan)
+void LocalisationServer::scan_callback(const sensor_msgs::LaserScanConstPtr &scan)
 {
     try
     {

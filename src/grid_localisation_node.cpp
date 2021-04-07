@@ -89,11 +89,11 @@ float measure_distance(int index_a, int index_b, int map_width, float resolution
   return sqrt((x-x_prime)*(x-x_prime) + (y-y_prime)*(y-y_prime));
 }
 
-class GridLocalisationNode
+class LocalisationServer
 {
 public:
-  GridLocalisationNode();
-  ~GridLocalisationNode();
+  LocalisationServer();
+  ~LocalisationServer();
 
 private:
   tf::TransformBroadcaster* tfb_;
@@ -197,20 +197,20 @@ private:
   void calculateGrid(std::promise<double> *promObj, unsigned long long start_pose_location, unsigned long long end_pose_location);
 };
 
-std::shared_ptr<GridLocalisationNode> grid_localisation_node_ptr;
+std::shared_ptr<LocalisationServer> grid_localisation_node_ptr;
 
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "grid_localisation");
   ros::NodeHandle n;
 
-  grid_localisation_node_ptr.reset(new GridLocalisationNode());
+  grid_localisation_node_ptr.reset(new LocalisationServer());
   ros::spin();
 
   return 0;
 }
 
-GridLocalisationNode::GridLocalisationNode() :
+LocalisationServer::LocalisationServer() :
                     private_nh_("~"),
                     laser_info_recieved_(false),
                     init_pose_recieved_(false)
@@ -248,9 +248,9 @@ GridLocalisationNode::GridLocalisationNode() :
 
   laser_scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>(nh_, scan_topic_, 100);
   laser_scan_filter_ = new tf::MessageFilter<sensor_msgs::LaserScan>(*laser_scan_sub_, *tf_, odom_frame_id_, 100);
-  laser_scan_filter_->registerCallback(boost::bind(&GridLocalisationNode::laserRecived, this, _1));
+  laser_scan_filter_->registerCallback(boost::bind(&LocalisationServer::laserRecived, this, _1));
 
-  initial_pose_sub_ = nh_.subscribe("initialpose", 2, &GridLocalisationNode::initialPoseReceived, this);
+  initial_pose_sub_ = nh_.subscribe("initialpose", 2, &LocalisationServer::initialPoseReceived, this);
 
   requestMap();
   computeLikelihoodField();
@@ -323,7 +323,7 @@ GridLocalisationNode::GridLocalisationNode() :
   }
 }
 
-GridLocalisationNode::~GridLocalisationNode()
+LocalisationServer::~LocalisationServer()
 {
   delete tfb_;
   delete tf_;
@@ -331,7 +331,7 @@ GridLocalisationNode::~GridLocalisationNode()
   delete laser_scan_filter_;
 }
 
-void GridLocalisationNode::laserRecived(const sensor_msgs::LaserScanConstPtr& laser_scan)
+void LocalisationServer::laserRecived(const sensor_msgs::LaserScanConstPtr& laser_scan)
 {
   if(!laser_info_recieved_)
   {
@@ -373,7 +373,7 @@ void GridLocalisationNode::laserRecived(const sensor_msgs::LaserScanConstPtr& la
          curr_odom_to_base_tf_.getOrigin().getX(), curr_odom_to_base_tf_.getOrigin().getY(), tf::getYaw(curr_odom_to_base_tf_.getRotation())};
 }
 
-void GridLocalisationNode::initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
+void LocalisationServer::initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
 {
   ROS_INFO("Initial pose: %f, %f, %f", msg->pose.pose.position.x, msg->pose.pose.position.y, tf::getYaw(msg->pose.pose.orientation));
   int col = floor(float(msg->pose.pose.position.x - map_origin_x_)/grid_linear_resolution_);
@@ -393,7 +393,7 @@ void GridLocalisationNode::initialPoseReceived(const geometry_msgs::PoseWithCova
 }
 
 
-void GridLocalisationNode::requestMap()
+void LocalisationServer::requestMap()
 {
   nav_msgs::GetMap::Request req;
   nav_msgs::GetMap::Response resp;
@@ -409,7 +409,7 @@ void GridLocalisationNode::requestMap()
   handleMapMessage(resp.map);
 }
 
-void GridLocalisationNode::handleMapMessage(const nav_msgs::OccupancyGrid &msg)
+void LocalisationServer::handleMapMessage(const nav_msgs::OccupancyGrid &msg)
 {
   map_width_in_grids_ = msg.info.width;
   map_width_ = msg.info.resolution*map_width_in_grids_;
@@ -422,7 +422,7 @@ void GridLocalisationNode::handleMapMessage(const nav_msgs::OccupancyGrid &msg)
   likelihood_data_.assign(map_data_.size(), 0.0);
 }
 
-void GridLocalisationNode::computeLikelihoodField()
+void LocalisationServer::computeLikelihoodField()
 {
   ROS_INFO("Calculating likelihood field...");
   std::vector<int> occupied_cells;
@@ -450,7 +450,7 @@ void GridLocalisationNode::computeLikelihoodField()
   ROS_INFO("Completed likelihood field calculation");
 }
 
-void GridLocalisationNode::DFS(const int &index_curr, const int &index_of_obstacle, std::vector<bool> &visited)
+void LocalisationServer::DFS(const int &index_curr, const int &index_of_obstacle, std::vector<bool> &visited)
 {
 	visited[index_curr] = true;
   int* coord = ind2map(index_curr, map_width_in_grids_);
@@ -505,7 +505,7 @@ void GridLocalisationNode::DFS(const int &index_curr, const int &index_of_obstac
 	}
 }
 
-void GridLocalisationNode::initialiseDistributions()
+void LocalisationServer::initialiseDistributions()
 {
   ROS_INFO("Initialising distributions...");
   // for (int row = 0; row < grid_height_; row++)
@@ -522,7 +522,7 @@ void GridLocalisationNode::initialiseDistributions()
   ROS_INFO("Initialised!");
 }
 
-void GridLocalisationNode::getLaserPose()
+void LocalisationServer::getLaserPose()
 {
   tf::StampedTransform base_to_laser_tf;
   tf_->waitForTransform(base_frame_id_, laser_frame_id_, ros::Time(0), ros::Duration(10.0));
@@ -530,7 +530,7 @@ void GridLocalisationNode::getLaserPose()
   laser_pose_ = {base_to_laser_tf.getOrigin().getX(), base_to_laser_tf.getOrigin().getY(), tf::getYaw(base_to_laser_tf.getRotation())};
 }
 
-bool GridLocalisationNode::noMotion()
+bool LocalisationServer::noMotion()
 {
   double x = prev_odom_to_base_tf_.getOrigin().getX();
   double y = prev_odom_to_base_tf_.getOrigin().getY();
@@ -560,7 +560,7 @@ bool GridLocalisationNode::noMotion()
   return true;
 }
 
-void GridLocalisationNode::updateRollingWindow()
+void LocalisationServer::updateRollingWindow()
 {
   window_start_x_ = curr_pose_.pose.pose.position.x - (rolling_window_length_/2);
   window_start_y_ = curr_pose_.pose.pose.position.y - (rolling_window_length_/2);
@@ -609,7 +609,7 @@ void GridLocalisationNode::updateRollingWindow()
   }
 }
 
-void GridLocalisationNode::runGridLocalisation()
+void LocalisationServer::runGridLocalisation()
 {
   if(!laser_info_recieved_)
     return; 
@@ -626,9 +626,9 @@ void GridLocalisationNode::runGridLocalisation()
   
   std::vector<std::thread> threads;
   for(int i=0; i<number_of_threads_-1; i++)
-    threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[i], i*number_of_locations_per_thread, (i+1)*number_of_locations_per_thread);
+    threads.emplace_back(&LocalisationServer::calculateGrid, this, &promises[i], i*number_of_locations_per_thread, (i+1)*number_of_locations_per_thread);
   
-  threads.emplace_back(&GridLocalisationNode::calculateGrid, this, &promises[number_of_threads_-1], (number_of_threads_-1)*number_of_locations_per_thread, number_of_threads_*number_of_locations_per_thread + number_of_leftover_locations);
+  threads.emplace_back(&LocalisationServer::calculateGrid, this, &promises[number_of_threads_-1], (number_of_threads_-1)*number_of_locations_per_thread, number_of_threads_*number_of_locations_per_thread + number_of_leftover_locations);
 
   sum_of_dist_values_ = 0.0;
   for(int i=0; i<number_of_threads_; i++)
@@ -701,7 +701,7 @@ void GridLocalisationNode::runGridLocalisation()
   curr_pose_.pose.pose.orientation.w = quaternion_angle.getW();
 }
 
-double GridLocalisationNode::motionModel(double* xt, std::vector<double> &ut, double* xt_1)
+double LocalisationServer::motionModel(double* xt, std::vector<double> &ut, double* xt_1)
 {
   double x_prime = xt[0];
   double y_prime = xt[1];
@@ -756,7 +756,7 @@ double GridLocalisationNode::motionModel(double* xt, std::vector<double> &ut, do
   return p1*p2*p3;  
 }
 
-double GridLocalisationNode::laserModel(double* xt)
+double LocalisationServer::laserModel(double* xt)
 {
   double q = 1.0;
   double z_max = laser_max_range_, z_rand_max = z_random_/z_max;
@@ -804,7 +804,7 @@ double GridLocalisationNode::laserModel(double* xt)
 }
 
 
-void GridLocalisationNode::calculateGrid(std::promise<double> *promObj, unsigned long long start_pose_location, unsigned long long end_pose_location)
+void LocalisationServer::calculateGrid(std::promise<double> *promObj, unsigned long long start_pose_location, unsigned long long end_pose_location)
 {
   std::lock_guard<std::mutex> lock(vector_mutex_);
 

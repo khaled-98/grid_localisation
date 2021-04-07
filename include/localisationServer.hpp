@@ -1,5 +1,5 @@
-#ifndef SRC_GRID_LOCALISATION_INCLUDE_GRIDLOCALISATIONNODE
-#define SRC_GRID_LOCALISATION_INCLUDE_GRIDLOCALISATIONNODE
+#ifndef SRC_GRID_LOCALISATION_INCLUDE_LOCALISATIONSERVER
+#define SRC_GRID_LOCALISATION_INCLUDE_LOCALISATIONSERVER
 
 #include "ros/ros.h"
 #include "../include/motionModel.hpp"
@@ -13,10 +13,10 @@
 #include "geometry_msgs/TransformStamped.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 
-class GridLocalisationNode
+class LocalisationServer
 {
 public:
-    GridLocalisationNode();
+    LocalisationServer();
     nav_msgs::OccupancyGrid request_map();
     void scan_callback(const sensor_msgs::LaserScanConstPtr &scan);
     void run_through_algorithm();
@@ -41,4 +41,4 @@ private:
     ros::Publisher curr_location_pub_;
 };
 
-#endif /* SRC_GRID_LOCALISATION_INCLUDE_GRIDLOCALISATIONNODE */
+#endif /* SRC_GRID_LOCALISATION_INCLUDE_LOCALISATIONSERVER */

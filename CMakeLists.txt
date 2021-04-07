@@ -33,7 +33,7 @@ add_library(libraries
   src/motionModel.cpp
   src/measurementModel.cpp
   src/gridLocalisation.cpp
-  src/gridLocalisationNode.cpp
+  src/localisationServer.cpp
   src/utils.cpp
 )
 
