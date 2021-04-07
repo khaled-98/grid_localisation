@@ -50,6 +50,9 @@ private:
 
     geometry_msgs::PoseWithCovarianceStamped curr_pose_;
     geometry_msgs::TransformStamped prev_odom_;
+
+    bool visualisation_flag_;
+    ros::Publisher visual_pub_;
 };
 
 #endif /* SRC_GRID_LOCALISATION_INCLUDE_GRIDLOCALISATION */

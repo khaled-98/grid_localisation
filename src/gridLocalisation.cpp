@@ -1,5 +1,8 @@
 #include "../include/gridLocalisation.hpp"
 #include "../include/utils.hpp"
+#include "visualization_msgs/Marker.h"
+#include "geometry_msgs/Point.h"
+#include "std_msgs/ColorRGBA.h"
 #include <vector>
 
 GridLocalisation::GridLocalisation(const std::shared_ptr<MotionModel> &motion_model,
@@ -16,6 +19,9 @@ GridLocalisation::GridLocalisation(const std::shared_ptr<MotionModel> &motion_mo
     private_nh_.param("starting_y", starting_y_, 0.0);
     private_nh_.param("starting_theta", starting_theta_, 0.0);
 
+    private_nh_.param("visualisation", visualisation_flag_, false);
+    if(visualisation_flag_)
+        visual_pub_ = nh_.advertise<visualization_msgs::Marker>("probability_visualisation", 0);
 }
 
 void GridLocalisation::set_map(const nav_msgs::OccupancyGrid &map)
@@ -112,7 +118,8 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
         }
     }
 
-    ROS_WARN("Sum: %f", sum_of_dist_values);
+    std::vector<geometry_msgs::Point> points;
+    std::vector<std_msgs::ColorRGBA> colors;
 
     // Normalise the probablity and calculate the max
     int max_row = 0;
@@ -136,8 +143,37 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
                 }
                 p_t_1_[grid_row][grid_col][grid_layer] = p_bar_k_t_[grid_row][grid_col][grid_layer];
                 p_bar_k_t_[grid_row][grid_col][grid_layer] = 0.0;
+
+                if(visualisation_flag_)
+                {
+                    geometry_msgs::Point point;
+                    point.x = grid_col*grid_linear_resolution_;
+                    point.y = grid_row*grid_linear_resolution_;
+                    point.z = grid_layer*grid_angular_resolution_*0.5;
+                    points.push_back(point);
+
+                    std_msgs::ColorRGBA color;
+                    color.a = p_t_1_[grid_row][grid_col][grid_layer];
+                    color.r = 1.0;
+                    colors.push_back(color);
+                }    
             }
         }
+    }
+
+    if(visualisation_flag_)
+    {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = "map";
+        marker.header.stamp = ros::Time();
+        marker.type = visualization_msgs::Marker::POINTS;
+        marker.scale.x = 0.1;
+        marker.scale.y = 0.1;
+        marker.color.a = 1.0;
+        marker.points = points;
+        marker.colors = colors;
+
+        visual_pub_.publish(marker);
     }
 
     if(max_prob != 0.0)
