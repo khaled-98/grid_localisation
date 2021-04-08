@@ -46,6 +46,15 @@ nav_msgs::OccupancyGrid LocalisationServer::request_map()
 
 void LocalisationServer::scan_callback(const sensor_msgs::LaserScanConstPtr &scan)
 {
+    static bool laser_pose_set = false;
+    if(!laser_pose_set)
+    {
+        ROS_INFO("Getting laser pose...");
+        measurement_model_->setLaserPose(tf_buffer_->lookupTransform(base_frame_id_, scan->header.frame_id, ros::Time(0)));
+        ROS_INFO("Got laser pose!");
+        laser_pose_set = true;
+    }
+
     try
     {
         curr_odom_ = tf_buffer_->lookupTransform(odom_frame_id_, base_frame_id_, scan->header.stamp, ros::Duration(1.0));
@@ -53,7 +62,6 @@ void LocalisationServer::scan_callback(const sensor_msgs::LaserScanConstPtr &sca
         curr_location.header.stamp = ros::Time::now();
         curr_location.header.frame_id = global_frame_id_;
         curr_location_pub_.publish(curr_location);
-        // ROS_ERROR("`%f, %f", curr_location.pose.pose.position.x, curr_location.pose.pose.position.y);
     }
     catch(tf2::TransformException &ex)
     {

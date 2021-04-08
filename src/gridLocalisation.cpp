@@ -4,6 +4,7 @@
 #include "geometry_msgs/Point.h"
 #include "std_msgs/ColorRGBA.h"
 #include <vector>
+#include "tf2/utils.h"
 
 GridLocalisation::GridLocalisation(const std::shared_ptr<MotionModel> &motion_model,
                                    const std::shared_ptr<MeasurementModel> &measurement_model)
@@ -30,7 +31,7 @@ void GridLocalisation::set_map(const nav_msgs::OccupancyGrid &map)
     map_origin_x_ = map.info.origin.position.x;
     map_origin_y_ = map.info.origin.position.y;
     map_resolution_ = map.info.resolution;
-    // measurement_model->compute_likelihood_field_prob(map)
+    measurement_model_->setMap(map);
 
     number_of_grid_rows_ = (map.info.height*map.info.resolution)/grid_linear_resolution_;
     number_of_grid_cols_ = (map.info.width*map.info.resolution)/grid_linear_resolution_;
@@ -69,8 +70,6 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
     if(!Utils::has_moved(prev_odom_, curr_odom, grid_linear_resolution_, grid_angular_resolution_))
         return curr_pose_;
 
-    ROS_WARN("START");
-
     double ut_1[3];
     ut_1[0] = prev_odom_.transform.translation.x - map_origin_x_;
     ut_1[1] = prev_odom_.transform.translation.y - map_origin_y_;
@@ -108,12 +107,21 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
                             xt_1[1] = grid_row_2*grid_linear_resolution_;
                             xt_1[2] = Utils::angle_diff(grid_layer_2*grid_angular_resolution_, 0);
 
-                            double temp = p_t_1_[grid_row_2][grid_col_2][grid_layer_2]*motion_model_->run(xt, xt_1, ut, ut_1);
-                            p_bar_k_t_[grid_row][grid_col][grid_layer] += temp;
-                            sum_of_dist_values += temp;
+                            p_bar_k_t_[grid_row][grid_col][grid_layer] += p_t_1_[grid_row_2][grid_col_2][grid_layer_2]*motion_model_->run(xt, xt_1, ut, ut_1);;
                         }
                     }
                 }
+
+                geometry_msgs::TransformStamped curr_pose;
+                curr_pose.transform.translation.x = xt[0];
+                curr_pose.transform.translation.y = xt[1];
+
+                tf2::Quaternion tf_quat;
+                tf_quat.setRPY(0.0, 0.0, xt[2]);
+                tf2::convert(tf_quat, curr_pose.transform.rotation);
+                p_t_[grid_row][grid_col][grid_layer] = p_bar_k_t_[grid_row][grid_col][grid_layer] *
+                                                       measurement_model_->getScanProbability(curr_pose, scan);
+                sum_of_dist_values += p_t_[grid_row][grid_col][grid_layer];
             }
         }
     }
@@ -121,7 +129,7 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
     std::vector<geometry_msgs::Point> points;
     std::vector<std_msgs::ColorRGBA> colors;
 
-    // Normalise the probablity and calculate the max
+    // Normalise the probability and calculate the max
     int max_row = 0;
     int max_col = 0;
     int max_layer = 0;
@@ -133,16 +141,17 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
         {
             for(int grid_layer=0; grid_layer<number_of_grid_layers_; grid_layer++)
             {
-                p_bar_k_t_[grid_row][grid_col][grid_layer] /= sum_of_dist_values;
-                if(p_bar_k_t_[grid_row][grid_col][grid_layer] > max_prob)
+                p_t_[grid_row][grid_col][grid_layer] /= sum_of_dist_values;
+                if(p_t_[grid_row][grid_col][grid_layer] > max_prob)
                 {
-                    max_prob = p_bar_k_t_[grid_row][grid_col][grid_layer];
+                    max_prob = p_t_[grid_row][grid_col][grid_layer];
                     max_row = grid_row;
                     max_col = grid_col;
                     max_layer = grid_layer;
                 }
-                p_t_1_[grid_row][grid_col][grid_layer] = p_bar_k_t_[grid_row][grid_col][grid_layer];
+                p_t_1_[grid_row][grid_col][grid_layer] = p_t_[grid_row][grid_col][grid_layer];
                 p_bar_k_t_[grid_row][grid_col][grid_layer] = 0.0;
+                p_t_[grid_row][grid_col][grid_layer] = 0.0;
 
                 if(visualisation_flag_)
                 {
@@ -183,7 +192,6 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
         curr_pose_.pose.pose.orientation = Utils::getQuat(max_layer*grid_angular_resolution_); // Is the domain of the angle correct?
     }
 
-    ROS_WARN("FINISH: %f, %f", curr_pose_.pose.pose.position.x, curr_pose_.pose.pose.position.y);
     prev_odom_ = curr_odom;
     return curr_pose_;
 }
