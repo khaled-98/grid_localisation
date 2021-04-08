@@ -35,6 +35,7 @@ add_library(libraries
   src/gridLocalisation.cpp
   src/localisationServer.cpp
   src/utils.cpp
+  src/map_utils.cpp
 )
 
 target_link_libraries(libraries ${catkin_LIBRARIES})
