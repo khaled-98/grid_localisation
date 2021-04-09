@@ -11,10 +11,10 @@ MeasurementModel::MeasurementModel() : private_nh_("~")
     private_nh_.param("z_rand", z_rand_, 0.05);
 }
 
-double MeasurementModel::getScanProbability(const geometry_msgs::TransformStamped &curr_pose, const sensor_msgs::LaserScanConstPtr &scan)
+double MeasurementModel::getScanProbability(const geometry_msgs::Pose &curr_pose, const sensor_msgs::LaserScanConstPtr &scan)
 {
     double q = 1.0;
-	double theta = tf2::getYaw(curr_pose.transform.rotation);
+	double theta = tf2::getYaw(curr_pose.orientation);
 
 	double z_max = scan->range_max;
 	double z_min = scan->range_min;
@@ -28,12 +28,12 @@ double MeasurementModel::getScanProbability(const geometry_msgs::TransformStampe
 		{
 			double beam_angle = tf2::getYaw(laser_pose_.transform.rotation) + 
 								scan->angle_min + scan->angle_increment*i;
-			double x_z_kt = curr_pose.transform.translation.x +
+			double x_z_kt = curr_pose.position.x +
 							laser_pose_.transform.translation.x * cos(theta) -
 							laser_pose_.transform.translation.y * sin(theta) +
 							scan->ranges[i] * 
 							cos(theta + beam_angle);
-			double y_z_kt = curr_pose.transform.translation.y +
+			double y_z_kt = curr_pose.position.y +
 							laser_pose_.transform.translation.y * cos(theta) +
 							laser_pose_.transform.translation.x * sin(theta) +
 							scan->ranges[i] * 

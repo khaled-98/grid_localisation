@@ -19,8 +19,13 @@ public:
                      const std::shared_ptr<MeasurementModel> &measurement_model);
     geometry_msgs::PoseWithCovarianceStamped localise(const sensor_msgs::LaserScanConstPtr &scan,
                                                       const geometry_msgs::TransformStamped &curr_odom);
-    void set_map(const nav_msgs::OccupancyGrid &map);
+    void setMap(const nav_msgs::OccupancyGrid &map);
 private:
+    void updateRollingWindow();
+
+    double rolling_window_length_;
+    std::vector<std::vector<int>> rolling_window_;
+
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
     
@@ -28,20 +33,17 @@ private:
     std::shared_ptr<MeasurementModel> measurement_model_;
     
     bool map_recieved_{false};
-    double map_origin_x_;
-    double map_origin_y_;
-    double map_resolution_;
+    nav_msgs::OccupancyGrid map_;
 
-    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_bar_k_t_;
-    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_t_;
-    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_t_1_;
+    std::unordered_map<double, std::unordered_map<double, std::unordered_map<double, double>>> p_bar_k_t_;
+    std::unordered_map<double, std::unordered_map<double, std::unordered_map<double, double>>> p_t_;
+    std::unordered_map<double, std::unordered_map<double, std::unordered_map<double, double>>> p_t_1_;
 
     double grid_linear_resolution_;
     double grid_angular_resolution_;
-
-    int number_of_grid_rows_;
-    int number_of_grid_cols_;
-    int number_of_grid_layers_;
+    int grid_height_;
+    int grid_width_;
+    int grid_depth_;
     
     bool starting_point_set_;
     double starting_x_;

@@ -14,7 +14,7 @@ LocalisationServer::LocalisationServer() : private_nh_("~")
     measurement_model_ = std::make_shared<MeasurementModel>();
     grid_localisation_ = std::make_shared<GridLocalisation>(motion_model_, measurement_model_);
 
-    grid_localisation_->set_map(request_map());
+    grid_localisation_->setMap(requestMap());
 
     laser_scan_sub_ = std::make_shared<message_filters::Subscriber<sensor_msgs::LaserScan>>(nh_, laser_topic_, 100);
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>();
@@ -24,10 +24,10 @@ LocalisationServer::LocalisationServer() : private_nh_("~")
                                                                                           odom_frame_id_,
                                                                                           100,
                                                                                           nh_);
-    laser_scan_filter_->registerCallback(std::bind(&LocalisationServer::scan_callback, this, std::placeholders::_1));
+    laser_scan_filter_->registerCallback(std::bind(&LocalisationServer::scanCallback, this, std::placeholders::_1));
 }
 
-nav_msgs::OccupancyGrid LocalisationServer::request_map()
+nav_msgs::OccupancyGrid LocalisationServer::requestMap()
 {
     nav_msgs::GetMap::Request req;
     nav_msgs::GetMap::Response resp;
@@ -44,7 +44,7 @@ nav_msgs::OccupancyGrid LocalisationServer::request_map()
     return resp.map;
 }
 
-void LocalisationServer::scan_callback(const sensor_msgs::LaserScanConstPtr &scan)
+void LocalisationServer::scanCallback(const sensor_msgs::LaserScanConstPtr &scan)
 {
     static bool laser_pose_set = false;
     if(!laser_pose_set)
@@ -57,8 +57,8 @@ void LocalisationServer::scan_callback(const sensor_msgs::LaserScanConstPtr &sca
 
     try
     {
-        curr_odom_ = tf_buffer_->lookupTransform(odom_frame_id_, base_frame_id_, scan->header.stamp, ros::Duration(1.0));
-        geometry_msgs::PoseWithCovarianceStamped curr_location = grid_localisation_->localise(scan, curr_odom_);
+        geometry_msgs::TransformStamped curr_odom = tf_buffer_->lookupTransform(odom_frame_id_, base_frame_id_, scan->header.stamp, ros::Duration(1.0));
+        geometry_msgs::PoseWithCovarianceStamped curr_location = grid_localisation_->localise(scan, curr_odom);
         curr_location.header.stamp = ros::Time::now();
         curr_location.header.frame_id = global_frame_id_;
         curr_location_pub_.publish(curr_location);

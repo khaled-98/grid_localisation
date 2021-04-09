@@ -5,13 +5,14 @@
 #include "sensor_msgs/LaserScan.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "geometry_msgs/TransformStamped.h"
+#include "geometry_msgs/Pose.h"
 #include <unordered_map>
 
 class MeasurementModel
 {
 public:
     MeasurementModel();
-    double getScanProbability(const geometry_msgs::TransformStamped &curr_pose, const sensor_msgs::LaserScanConstPtr &scan);
+    double getScanProbability(const geometry_msgs::Pose &curr_pose, const sensor_msgs::LaserScanConstPtr &scan);
     void setMap(const nav_msgs::OccupancyGrid &map);
     void setLaserPose(const geometry_msgs::TransformStamped &laser_pose);
 

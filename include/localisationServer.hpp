@@ -17,9 +17,8 @@ class LocalisationServer
 {
 public:
     LocalisationServer();
-    nav_msgs::OccupancyGrid request_map();
-    void scan_callback(const sensor_msgs::LaserScanConstPtr &scan);
-    void run_through_algorithm();
+    nav_msgs::OccupancyGrid requestMap();
+    void scanCallback(const sensor_msgs::LaserScanConstPtr &scan);
 
 private:
     ros::NodeHandle nh_;
@@ -32,12 +31,12 @@ private:
     std::string base_frame_id_;
     std::string global_frame_id_;
     std::string laser_topic_;
+
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::LaserScan>> laser_scan_filter_;
     std::shared_ptr<message_filters::Subscriber<sensor_msgs::LaserScan>> laser_scan_sub_;
 
-    geometry_msgs::TransformStamped curr_odom_;
     ros::Publisher curr_location_pub_;
 };
 

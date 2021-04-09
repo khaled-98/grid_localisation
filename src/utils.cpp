@@ -9,7 +9,7 @@ int map_to_index(const int &row, const int &col, const int &map_width)
     return row*map_width + col;
 }
 
-double get_angle_from_quat(geometry_msgs::Quaternion quat_geo)
+double getAngle(geometry_msgs::Quaternion quat_geo)
 {
     tf2::Quaternion quat_tf;
     tf2::fromMsg(quat_geo, quat_tf);
@@ -27,21 +27,21 @@ geometry_msgs::Quaternion getQuat(double yaw)
     return geo_quat;
 }
 
-bool has_moved(const geometry_msgs::TransformStamped &start,
+bool hasMoved(const geometry_msgs::TransformStamped &start,
                const geometry_msgs::TransformStamped &end,
                const double &trans_tol,
                const double &rot_tol)
 {
-    double theta = get_angle_from_quat(start.transform.rotation);
+    double theta = getAngle(start.transform.rotation);
     double x = start.transform.translation.x;
     double y = start.transform.translation.y;
 
-    double theta_prime = get_angle_from_quat(end.transform.rotation);
+    double theta_prime = getAngle(end.transform.rotation);
     double x_prime = end.transform.translation.x;
     double y_prime = end.transform.translation.y;
     
     double translation = sqrt(pow(x_prime-x, 2) + pow(y_prime-y, 2));
-    double rotation = abs(angle_diff(theta_prime, theta));
+    double rotation = abs(angleDiff(theta_prime, theta));
 
     if(translation > trans_tol || rotation > rot_tol)
         return true;
@@ -49,7 +49,7 @@ bool has_moved(const geometry_msgs::TransformStamped &start,
         return false;
 }
 
-double angle_diff(double a, double b)
+double angleDiff(double a, double b)
 {
     double angle = a - b;
 
@@ -69,4 +69,12 @@ double prob(double a, double b)
 {
     return (1.0/(sqrt(2*M_PI)*b))*exp(-0.5*((a*a)/(b*b)));
 }
+
+unsigned long long subToIndex(int n1, int n2, int n3, int N2, int N3)
+{
+    // https://eli.thegreenplace.net/2015/memory-layout-of-multi-dimensional-arrays/
+    return n3 + N3*(n2+N2*n1);
+}
+
+
 } // namespace Utils
