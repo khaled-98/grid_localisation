@@ -5,6 +5,7 @@
 #include "std_msgs/ColorRGBA.h"
 #include <vector>
 #include "tf2/utils.h"
+#include <cmath>
 
 GridLocalisation::GridLocalisation(const std::shared_ptr<MotionModel> &motion_model,
                                    const std::shared_ptr<MeasurementModel> &measurement_model)
@@ -24,7 +25,10 @@ GridLocalisation::GridLocalisation(const std::shared_ptr<MotionModel> &motion_mo
 
     private_nh_.param("visualisation", visualisation_flag_, false);
     if(visualisation_flag_)
-        visual_pub_ = nh_.advertise<visualization_msgs::Marker>("probability_visualisation", 0);
+    {
+        prob_visual_pub_ = nh_.advertise<visualization_msgs::Marker>("probability_visualisation", 0);
+        rolling_window_visual_pub_ = nh_.advertise<visualization_msgs::Marker>("rolling_window", 0);
+    }
 }
 
 void GridLocalisation::setMap(const nav_msgs::OccupancyGrid &map)
@@ -33,17 +37,17 @@ void GridLocalisation::setMap(const nav_msgs::OccupancyGrid &map)
     map_ = map;
     measurement_model_->setMap(map);
 
-    grid_height_ = (map.info.height*map.info.resolution)/grid_linear_resolution_;
-    grid_width_ = (map.info.width*map.info.resolution)/grid_linear_resolution_;
-    grid_depth_ = (2*M_PI)/grid_angular_resolution_;
-
     // Initialise distribution
     if(starting_point_set_)
     {
         if(starting_theta_ < 0.0)
             starting_theta_ += 2*M_PI; // keep it in the 0 to 2pi range
 
-        p_t_1_[starting_x_][starting_y_][starting_theta_] = 1.0;
+        int x = starting_x_/grid_linear_resolution_;
+        int y = starting_y_/grid_linear_resolution_;
+        int theta = starting_theta_/grid_angular_resolution_;
+
+        p_t_1_[x][y][theta] = 1.0;
         curr_pose_.pose.pose.position.x = starting_x_;
         curr_pose_.pose.pose.position.y = starting_y_;
         curr_pose_.pose.pose.orientation = Utils::getQuat(starting_theta_);
@@ -67,28 +71,95 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
     double map_width = map_.info.width * map_.info.resolution;  // along the x axis
     double map_height = map_.info.height * map_.info.resolution; // along the y axis
 
-    double sum_of_dist_values = 0.0;
-    for(double x_k = 0.0; x_k < map_width; x_k += grid_linear_resolution_)
+    // update the rolling window
+    double start_x = curr_pose_.pose.pose.position.x - (rolling_window_length_/2);
+    if(start_x < map_.info.origin.position.x)
+        start_x = map_.info.origin.position.x;
+    start_x /= grid_linear_resolution_;
+    
+    int window_start_x = round(start_x);
+
+    double start_y = curr_pose_.pose.pose.position.y - (rolling_window_length_/2);
+    if(start_y < map_.info.origin.position.y)
+        start_y = map_.info.origin.position.y;
+    start_y /= grid_linear_resolution_;
+    
+    int window_start_y = round(start_y);
+
+    double end_x = curr_pose_.pose.pose.position.x + (rolling_window_length_/2);
+    if(end_x > (map_.info.origin.position.x + map_width))
+        end_x = map_.info.origin.position.x + map_width;
+    end_x /= grid_linear_resolution_;
+
+    int window_end_x = round(end_x);
+
+    double end_y = curr_pose_.pose.pose.position.y + (rolling_window_length_/2);
+    if(end_y > (map_.info.origin.position.y + map_height))
+        end_y = map_.info.origin.position.y + map_height;
+    end_y /= grid_linear_resolution_;
+    
+    int window_end_y = round(end_y);
+ 
+    if(visualisation_flag_)
     {
-        for(double y_k = 0.0; y_k < map_height; y_k += grid_linear_resolution_)
+        visualization_msgs::Marker rolling_window_marker;
+        rolling_window_marker.header.frame_id = "map";
+        rolling_window_marker.header.stamp = ros::Time();
+        rolling_window_marker.type = visualization_msgs::Marker::LINE_STRIP;
+        rolling_window_marker.scale.x = 0.01;
+        rolling_window_marker.color.a = 1.0;
+
+        std::vector<geometry_msgs::Point> rolling_window_corners;
+        geometry_msgs::Point p1;
+        p1.x = window_start_x*grid_linear_resolution_;
+        p1.y = window_start_y*grid_linear_resolution_;
+        
+        geometry_msgs::Point p2;
+        p2.x = window_end_x*grid_linear_resolution_;
+        p2.y = window_start_y*grid_linear_resolution_;
+        
+        geometry_msgs::Point p3;
+        p3.x = window_end_x*grid_linear_resolution_;
+        p3.y = window_end_y*grid_linear_resolution_;
+        
+        geometry_msgs::Point p4;
+        p4.x = window_start_x*grid_linear_resolution_;
+        p4.y = window_end_y*grid_linear_resolution_;
+        rolling_window_corners.push_back(p1);
+        rolling_window_corners.push_back(p2);
+        rolling_window_corners.push_back(p2);
+        rolling_window_corners.push_back(p3);
+        rolling_window_corners.push_back(p3);
+        rolling_window_corners.push_back(p4);
+        rolling_window_corners.push_back(p4);
+        rolling_window_corners.push_back(p1);
+        
+        rolling_window_marker.points = rolling_window_corners;
+        rolling_window_visual_pub_.publish(rolling_window_marker);
+    }
+
+    double sum_of_dist_values = 0.0;
+    for(int x_k = window_start_x; x_k < window_end_x; x_k++)
+    {
+        for(int y_k = window_start_y; y_k < window_end_y; y_k++)
         {
-            for(double theta_k = 0.0; theta_k < 2*M_PI; theta_k += grid_angular_resolution_)
+            for(int theta_k = 0; theta_k < (2*M_PI/grid_angular_resolution_); theta_k += grid_angular_resolution_)
             {
                 geometry_msgs::Pose xt;
-                xt.position.x = x_k + map_.info.origin.position.x;
-                xt.position.y = y_k + map_.info.origin.position.y;
-                xt.orientation = Utils::getQuat(theta_k);
+                xt.position.x = x_k*grid_linear_resolution_;
+                xt.position.y = y_k*grid_linear_resolution_;
+                xt.orientation = Utils::getQuat(theta_k*grid_angular_resolution_);
 
-                for(double x_i = 0.0; x_i < map_width; x_i += grid_linear_resolution_)
+                for(int x_i = window_start_x; x_i < window_end_x; x_i++)
                 {
-                    for(double y_i = 0.0; y_i < map_height; y_i += grid_linear_resolution_)
+                    for(int y_i = window_start_y; y_i < window_end_y; y_i++)
                     {
-                        for(double theta_i = 0.0; theta_i < 2*M_PI; theta_i += grid_angular_resolution_)
+                        for(int theta_i = 0; theta_i < (2*M_PI/grid_angular_resolution_); theta_i++)
                         {
                             geometry_msgs::Pose xt_1;
-                            xt_1.position.x = x_i + map_.info.origin.position.x;
-                            xt_1.position.y = y_i + map_.info.origin.position.y;
-                            xt_1.orientation = Utils::getQuat(theta_i);
+                            xt_1.position.x = x_i*grid_linear_resolution_;
+                            xt_1.position.y = y_i*grid_linear_resolution_;
+                            xt_1.orientation = Utils::getQuat(theta_i*grid_angular_resolution_);
 
                             if(xt == xt_1)
                                 continue;
@@ -107,15 +178,15 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
     std::vector<geometry_msgs::Point> points;
     std::vector<std_msgs::ColorRGBA> colors;
 
-    double max_x = 0.0;
-    double max_y = 0.0;
-    double max_theta = 0.0;
+    int max_x = 0;
+    int max_y = 0;
+    int max_theta = 0;
     double max_prob = 0.0;
-    for(double x = 0.0; x < map_width; x += grid_linear_resolution_)
+    for(int x = window_start_x; x < window_end_x; x++)
     {
-        for(double y = 0.0; y < map_height; y += grid_linear_resolution_)
+        for(int y = window_start_y; y < window_end_y; y++)
         {
-            for(double theta = 0.0; theta < 2*M_PI; theta += grid_angular_resolution_)
+            for(int theta = 0.0; theta < (2*M_PI/grid_angular_resolution_); theta++)
             {
                 geometry_msgs::Pose xt;
                 xt.position.x = x;
@@ -137,9 +208,9 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
                 if(visualisation_flag_)
                 {
                     geometry_msgs::Point point;
-                    point.x = x;
-                    point.y = y;
-                    point.z = theta*0.5;
+                    point.x = x*grid_linear_resolution_;
+                    point.y = y*grid_linear_resolution_;
+                    point.z = theta*grid_angular_resolution_*0.5;
                     points.push_back(point);
 
                     std_msgs::ColorRGBA color;
@@ -163,14 +234,14 @@ geometry_msgs::PoseWithCovarianceStamped GridLocalisation::localise(const sensor
         marker.points = points;
         marker.colors = colors;
 
-        visual_pub_.publish(marker);
+        prob_visual_pub_.publish(marker);
     }
 
     if(max_prob != 0.0)
     {
-        curr_pose_.pose.pose.position.x = max_x + map_.info.origin.position.x;
-        curr_pose_.pose.pose.position.y = max_y + map_.info.origin.position.y;
-        curr_pose_.pose.pose.orientation = Utils::getQuat(max_theta);
+        curr_pose_.pose.pose.position.x = max_x*grid_linear_resolution_;
+        curr_pose_.pose.pose.position.y = max_y*grid_linear_resolution_;
+        curr_pose_.pose.pose.orientation = Utils::getQuat(max_theta*grid_angular_resolution_);
     }
 
     prev_odom_ = curr_odom;

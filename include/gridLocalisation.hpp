@@ -21,8 +21,6 @@ public:
                                                       const geometry_msgs::TransformStamped &curr_odom);
     void setMap(const nav_msgs::OccupancyGrid &map);
 private:
-    void updateRollingWindow();
-
     double rolling_window_length_;
     std::vector<std::vector<int>> rolling_window_;
 
@@ -35,15 +33,12 @@ private:
     bool map_recieved_{false};
     nav_msgs::OccupancyGrid map_;
 
-    std::unordered_map<double, std::unordered_map<double, std::unordered_map<double, double>>> p_bar_k_t_;
-    std::unordered_map<double, std::unordered_map<double, std::unordered_map<double, double>>> p_t_;
-    std::unordered_map<double, std::unordered_map<double, std::unordered_map<double, double>>> p_t_1_;
+    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_bar_k_t_;
+    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_t_;
+    std::unordered_map<int, std::unordered_map<int, std::unordered_map<int, double>>> p_t_1_;
 
     double grid_linear_resolution_;
     double grid_angular_resolution_;
-    int grid_height_;
-    int grid_width_;
-    int grid_depth_;
     
     bool starting_point_set_;
     double starting_x_;
@@ -54,7 +49,8 @@ private:
     geometry_msgs::TransformStamped prev_odom_;
 
     bool visualisation_flag_;
-    ros::Publisher visual_pub_;
+    ros::Publisher prob_visual_pub_;
+    ros::Publisher rolling_window_visual_pub_;
 };
 
 #endif /* SRC_GRID_LOCALISATION_INCLUDE_GRIDLOCALISATION */
