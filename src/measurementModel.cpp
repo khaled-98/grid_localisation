@@ -24,7 +24,7 @@ double MeasurementModel::getScanProbability(const geometry_msgs::Pose &curr_pose
 	int beams_to_skip = static_cast<int>(scan->ranges.size())/max_number_of_beams;
 	for(int i=0; i<scan->ranges.size(); i+=beams_to_skip)
 	{
-		if(scan->ranges[i]<z_max_ && scan->ranges[i]>z_min) // within sensor range
+		if(scan->ranges[i]<z_max && scan->ranges[i]>z_min) // within sensor range
 		{
 			double beam_angle = tf2::getYaw(laser_pose_.transform.rotation) + 
 								scan->angle_min + scan->angle_increment*i;
